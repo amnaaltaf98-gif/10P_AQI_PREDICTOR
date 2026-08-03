@@ -6,7 +6,7 @@ python-dotenv
 
 # Feature store
 hopsworks
-
+confluent-kafka
 # Modeling
 scikit-learn
 xgboost
