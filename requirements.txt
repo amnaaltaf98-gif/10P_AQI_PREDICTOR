@@ -1,0 +1,28 @@
+# Core
+pandas
+numpy
+requests
+python-dotenv
+
+# Feature store
+hopsworks
+
+# Modeling
+scikit-learn
+xgboost
+lightgbm
+catboost
+shap
+
+# API
+fastapi
+uvicorn
+
+# Dashboard
+streamlit
+plotly
+
+# Optional deep learning / classical time-series (Phase 11)
+# tensorflow
+# prophet
+# statsmodels

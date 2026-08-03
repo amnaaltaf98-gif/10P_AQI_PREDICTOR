@@ -1,0 +1,11 @@
+venv/
+.env
+data/raw_all_cities.csv
+data/raw_*.csv
+data/features_all_cities.csv
+!data/live_buffer.csv
+models/*.pkl
+models/*.png
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
