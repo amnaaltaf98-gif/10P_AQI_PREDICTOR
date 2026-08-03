@@ -191,8 +191,13 @@ def push_to_hopsworks(df):
     project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY, project=HOPSWORKS_PROJECT_NAME)
     fs = project.get_feature_store()
     fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
-    fg.insert(df, write_options={"wait_for_job": True})
-    print(f"Pushed {len(df)} live rows to Hopsworks feature group '{FEATURE_GROUP_NAME}'.")
+
+    # wait_for_job=False: the actual row insert commits fine every time (confirmed in the
+    # Hopsworks UI). The separate background job that recomputes stats over the whole
+    # table keeps failing on the free tier, and waiting on it just makes this script exit
+    # with an error despite the data already being safely written.
+    fg.insert(df, write_options={"wait_for_job": False})
+    print(f"Insert submitted for {len(df)} live rows to Hopsworks feature group '{FEATURE_GROUP_NAME}'.")
 
 
 def main():
