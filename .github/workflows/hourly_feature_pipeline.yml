@@ -2,7 +2,7 @@ name: Hourly Feature Pipeline
 
 on:
   schedule:
-    - cron: "5 * * * *"  # 5 minutes past every hour
+    - cron: "37 * * * *"  # 5 minutes past every hour
   workflow_dispatch: {}    # allows manual trigger from the Actions tab
 
 permissions:
