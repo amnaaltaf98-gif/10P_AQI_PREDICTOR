@@ -2,7 +2,7 @@ name: Hourly Feature Pipeline
 
 on:
   schedule:
-    - cron: "5 * * * *"  # 5 minutes past every hour
+    - cron: "37 * * * *"  # 37 minutes past every hour - avoids the :00-:05 congestion window
   workflow_dispatch: {}    # allows manual trigger from the Actions tab
 
 permissions:
