@@ -16,7 +16,6 @@ CITIES = {
     "Rawalpindi": {"lat": 33.5651, "lon": 73.0169, "province": "Punjab"},
     "Faisalabad": {"lat": 31.4504, "lon": 73.1350, "province": "Punjab"},
     "Multan":     {"lat": 30.1575, "lon": 71.5249, "province": "Punjab"},
-    "Peshawar":   {"lat": 34.0151, "lon": 71.5249, "province": "KP"},
     "Quetta":     {"lat": 30.1798, "lon": 66.9750, "province": "Balochistan"},
     "Hyderabad":  {"lat": 25.3960, "lon": 68.3578, "province": "Sindh"},
     "Sialkot":    {"lat": 32.4945, "lon": 74.5229, "province": "Punjab"},
