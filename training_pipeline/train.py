@@ -1,136 +1,132 @@
 """
-Phase 11-13 - Train, evaluate, and explain models.
-
-Loads data/features_all_cities.csv, trains a global model per horizon
-(24h / 48h / 72h) with `city` as a categorical feature, compares against
-several baselines, and saves the best model + a SHAP summary plot.
-
-Usage:
-    python train.py
+Serverless-Ready Daily Retraining Pipeline for AQI Forecasting.
+Predicts DELTA AQI (AQI_future - AQI_current).
 """
-
-import pandas as pd
-import numpy as np
+import os
+import sys
 import joblib
-import shap
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import numpy as np
+import pandas as pd
 from lightgbm import LGBMRegressor
-from xgboost import XGBRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+sys.path.append("../feature_pipeline")
+from config import HOPSWORKS_API_KEY, HOPSWORKS_PROJECT_NAME, FEATURE_GROUP_NAME, FEATURE_GROUP_VERSION
+
+LOCAL_FALLBACK_PATH = "../data/features_all_cities.csv"
+LIVE_ACCUMULATED_PATH = "../data/features_live_accumulated.csv"
 
 TARGETS = ["target_aqi_24h", "target_aqi_48h", "target_aqi_72h"]
 
-FEATURE_COLUMNS = [
+RAW_FEATURE_COLUMNS = [
     "city", "hour", "day", "month", "weekday", "is_weekend", "season",
-    "pm2_5", "pm10", "nitrogen_dioxide", "sulphur_dioxide", "carbon_monoxide", "ozone",
+    "aqi", "pm2_5", "pm10", "nitrogen_dioxide", "sulphur_dioxide",
+    "carbon_monoxide", "ozone", "dust", "aerosol_optical_depth",
     "temperature_2m", "relative_humidity_2m", "surface_pressure",
     "wind_speed_10m", "wind_direction_10m", "cloud_cover", "precipitation",
+    "shortwave_radiation",
     "aqi_lag_1h", "aqi_lag_3h", "aqi_lag_6h", "aqi_lag_12h", "aqi_lag_24h",
     "aqi_roll_mean_3h", "aqi_roll_mean_6h", "aqi_roll_mean_24h",
-    "aqi_roll_max_3h", "aqi_roll_min_3h", "aqi_roll_std_24h",
+    "aqi_roll_max_3h", "aqi_roll_max_6h", "aqi_roll_max_24h",
+    "aqi_roll_min_3h", "aqi_roll_min_6h", "aqi_roll_min_24h",
+    "aqi_roll_std_3h", "aqi_roll_std_6h", "aqi_roll_std_24h",
     "pm_ratio", "wind_pollution_interaction", "aqi_change_rate",
     "temp_diff", "humidity_diff",
 ]
 
 CATEGORICAL_COLUMNS = ["city", "season"]
 
+LGBM_CONFIG = {
+    "n_estimators": 500, "learning_rate": 0.03, "max_depth": 6, "num_leaves": 31,
+    "subsample": 0.8, "colsample_bytree": 0.8, "n_jobs": -1, "random_state": 42, "verbose": -1,
+}
+
+def engineer_advanced_features(df):
+    df = df.copy()
+    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24.0)
+    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24.0)
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12.0)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12.0)
+    rad = np.radians(df["wind_direction_10m"])
+    df["wind_u"] = -df["wind_speed_10m"] * np.sin(rad)
+    df["wind_v"] = -df["wind_speed_10m"] * np.cos(rad)
+    if "city" in df.columns and "aqi" in df.columns:
+        df["aqi_ewma_6h"] = df.groupby("city")["aqi"].transform(lambda x: x.ewm(span=6).mean())
+        df["aqi_roll_mean_48h"] = df.groupby("city")["aqi"].transform(lambda x: x.rolling(48, min_periods=1).mean())
+        df["aqi_roll_max_72h"] = df.groupby("city")["aqi"].transform(lambda x: x.rolling(72, min_periods=1).max())
+        df["aqi_roll_std_48h"] = df.groupby("city")["aqi"].transform(lambda x: x.rolling(48, min_periods=1).std()).fillna(0)
+        df["aqi_trend_24h"] = df["aqi"] - df["aqi_lag_24h"]
+        df["pressure_trend_12h"] = df["surface_pressure"] - df.groupby("city")["surface_pressure"].shift(12).fillna(0)
+        df["temp_inversion_proxy"] = df["temperature_2m"] / (df["wind_speed_10m"] + 0.1)
+    for col in CATEGORICAL_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].astype("category")
+    return df
 
 def prepare_xy(df, target_col):
     data = df.dropna(subset=[target_col]).copy()
-    X = data[FEATURE_COLUMNS].copy()
-    y = data[target_col]
-
-    for col in CATEGORICAL_COLUMNS:
-        X[col] = X[col].astype("category")
-
-    return X, y
-
+    data = engineer_advanced_features(data)
+    data["target_delta"] = data[target_col] - data["aqi"]
+    new_cols = ["hour_sin","hour_cos","month_sin","month_cos","wind_u","wind_v",
+        "aqi_ewma_6h","aqi_roll_mean_48h","aqi_roll_max_72h","aqi_roll_std_48h",
+        "aqi_trend_24h","pressure_trend_12h","temp_inversion_proxy"]
+    feature_cols = [c for c in RAW_FEATURE_COLUMNS if c in data.columns] + new_cols
+    X = data[feature_cols].copy()
+    return X, data["target_delta"], data[target_col], data["aqi"]
 
 def evaluate(y_true, y_pred):
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = mean_squared_error(y_true, y_pred) ** 0.5
-    r2 = r2_score(y_true, y_pred)
-    mape = np.mean(np.abs((y_true - y_pred) / y_true.replace(0, np.nan))) * 100
-    return {"MAE": mae, "RMSE": rmse, "R2": r2, "MAPE": mape}
+    return {"MAE": mean_absolute_error(y_true, y_pred),
+            "RMSE": mean_squared_error(y_true, y_pred) ** 0.5,
+            "R2": r2_score(y_true, y_pred)}
 
+def train_serverless_horizon(df, target_col):
+    X, y_delta, y_actual, current_aqi = prepare_xy(df, target_col)
+    split_idx = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+    y_train_delta = y_delta.iloc[:split_idx]
+    y_test_actual = y_actual.iloc[split_idx:]
+    current_aqi_test = current_aqi.iloc[split_idx:]
+    model = LGBMRegressor(**LGBM_CONFIG)
+    model.fit(X_train, y_train_delta)
+    preds = np.clip(current_aqi_test + model.predict(X_test), 0, None)
+    return model, evaluate(y_test_actual, preds)
 
-def train_one_horizon(df, target_col):
-    print(f"\n=== Training for {target_col} ===")
-    X, y = prepare_xy(df, target_col)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+def load_data():
+    """Try Hopsworks first (the live, current source of truth), fall back to the local CSV."""
+    try:
+        import hopsworks
+        print("Loading features from Hopsworks feature store...")
+        project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY, project=HOPSWORKS_PROJECT_NAME)
+        fs = project.get_feature_store()
+        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+        df = fg.read()
+        print(f"Loaded {len(df)} rows from Hopsworks.")
+        return df
+    except Exception as e:
+        print(f"Could not load from Hopsworks ({e}), falling back to local files...")
+        df = pd.read_csv(LOCAL_FALLBACK_PATH)
+        print(f"Loaded {len(df)} rows from {LOCAL_FALLBACK_PATH}.")
 
-    # Persistence baseline: predict "AQI stays the same as right now"
-    baseline_pred = X_test["aqi_lag_1h"]
-    results = {"Persistence baseline": evaluate(y_test, baseline_pred)}
+        if os.path.exists(LIVE_ACCUMULATED_PATH):
+            live_df = pd.read_csv(LIVE_ACCUMULATED_PATH)
+            print(f"Merging in {len(live_df)} additional rows from {LIVE_ACCUMULATED_PATH}...")
+            df["time"] = pd.to_datetime(df["time"], format="mixed")
+            live_df["time"] = pd.to_datetime(live_df["time"], format="mixed")
+            df = pd.concat([df, live_df], ignore_index=True)
+            df = df.drop_duplicates(subset=["city", "time"], keep="last")
+            print(f"Combined total: {len(df)} rows.")
 
-    models = {
-        "Ridge": Ridge(),
-        "RandomForest": RandomForestRegressor(n_estimators=300, max_depth=12, random_state=42, n_jobs=-1),
-        "XGBoost": XGBRegressor(
-            n_estimators=400, max_depth=6, learning_rate=0.05,
-            enable_categorical=True, tree_method="hist", random_state=42,
-        ),
-        "LightGBM": LGBMRegressor(
-            n_estimators=400, max_depth=6, learning_rate=0.05,
-            random_state=42, verbose=-1,
-        ),
-    }
-
-    fitted_models = {}
-    for name, model in models.items():
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        results[name] = evaluate(y_test, preds)
-        fitted_models[name] = model
-        print(f"{name}: {results[name]}")
-
-    # pick best by RMSE among the real models (skip the baseline)
-    best_name = min(
-        (n for n in results if n != "Persistence baseline"),
-        key=lambda n: results[n]["RMSE"],
-    )
-    best_model = fitted_models[best_name]
-    print(f"Best model for {target_col}: {best_name}")
-
-    return best_model, best_name, results, X_test, y_test
-
-
-def save_shap_summary(model, X_test, target_col, model_name):
-    explainer = shap.TreeExplainer(model) if model_name != "Ridge" else shap.LinearExplainer(model, X_test)
-    shap_values = explainer.shap_values(X_test)
-
-    plt.figure()
-    shap.summary_plot(shap_values, X_test, show=False)
-    plt.title(f"SHAP summary - {target_col}")
-    plt.tight_layout()
-    out_path = f"../models/shap_{target_col}.png"
-    plt.savefig(out_path, dpi=150)
-    plt.close()
-    print(f"Saved SHAP plot -> {out_path}")
-
+        return df
 
 def main():
-    df = pd.read_csv("../data/features_all_cities.csv")
+    os.makedirs("../models", exist_ok=True)
+    df = load_data()
     df["time"] = pd.to_datetime(df["time"])
-    df = df.sort_values("time")  # time-ordered split, no shuffling across the train/test boundary
-
-    summary = {}
+    df = df.sort_values("time")
     for target_col in TARGETS:
-        best_model, best_name, results, X_test, y_test = train_one_horizon(df, target_col)
-        joblib.dump(best_model, f"../models/{target_col}_{best_name}.pkl")
-        save_shap_summary(best_model, X_test, target_col, best_name)
-        summary[target_col] = {"best_model": best_name, "metrics": results[best_name]}
-
-    print("\n=== Final Summary ===")
-    for target_col, info in summary.items():
-        print(target_col, info)
-
+        model, metrics = train_serverless_horizon(df, target_col)
+        joblib.dump(model, f"../models/{target_col}_delta_lgbm.pkl", compress=3)
+        print(f"{target_col} -> R2: {metrics['R2']:.4f}")
 
 if __name__ == "__main__":
     main()

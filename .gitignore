@@ -4,6 +4,7 @@ data/raw_all_cities.csv
 data/raw_*.csv
 data/features_all_cities.csv
 !data/live_buffer.csv
+!data/features_live_accumulated.csv
 models/*.pkl
 models/*.png
 __pycache__/

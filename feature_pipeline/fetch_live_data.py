@@ -185,6 +185,30 @@ def compute_live_features(combined_history_df, new_rows_df):
     return featured[is_new_row].reset_index(drop=True)
 
 
+LIVE_FEATURES_ACCUMULATED_PATH = "../data/features_live_accumulated.csv"
+
+
+def append_to_committed_features(live_features_df):
+    """
+    Persists the fully-featured live rows to a small, git-tracked CSV -
+    independent of Hopsworks entirely. This is what keeps the project working
+    if Hopsworks is unreachable, frozen (hit a free-tier budget cap), or you
+    decide to drop it later. train.py's Hopsworks fallback reads the original
+    historical backfill + this file together to reconstruct the full dataset.
+    """
+    if os.path.exists(LIVE_FEATURES_ACCUMULATED_PATH):
+        existing = pd.read_csv(LIVE_FEATURES_ACCUMULATED_PATH)
+        existing["time"] = pd.to_datetime(existing["time"], format="mixed")
+    else:
+        existing = pd.DataFrame(columns=live_features_df.columns)
+
+    combined = pd.concat([existing, live_features_df], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["city", "time"], keep="last")
+    combined = combined.sort_values(["city", "time"]).reset_index(drop=True)
+    combined.to_csv(LIVE_FEATURES_ACCUMULATED_PATH, index=False)
+    print(f"Saved {len(combined)} total accumulated live feature rows -> {LIVE_FEATURES_ACCUMULATED_PATH}")
+
+
 def push_to_hopsworks(df):
     import hopsworks
 
@@ -215,8 +239,19 @@ def main():
     live_features_df = compute_live_features(combined_history_df, new_rows_df)
     print(live_features_df[["time", "city", "aqi", "aqi_lag_1h", "aqi_roll_mean_24h"]])
 
-    print("Pushing to Hopsworks...")
-    push_to_hopsworks(live_features_df)
+    # always persist locally first - this succeeds regardless of Hopsworks' status,
+    # so a frozen/unreachable Hopsworks account never means lost data
+    print("Saving to the git-tracked accumulated features file...")
+    append_to_committed_features(live_features_df)
+
+    # Hopsworks push is best-effort from here - if it's down, over budget, or the
+    # free tier is frozen, that's not a reason to fail the whole hourly run, since
+    # the data is already safely saved locally above
+    print("Attempting to push to Hopsworks (non-fatal if this fails)...")
+    try:
+        push_to_hopsworks(live_features_df)
+    except Exception as e:
+        print(f"Hopsworks push failed (continuing anyway, data is saved locally): {e}")
 
 
 if __name__ == "__main__":
