@@ -10,3 +10,6 @@ models/*.png
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Streamlit local secrets
+.streamlit/secrets.toml

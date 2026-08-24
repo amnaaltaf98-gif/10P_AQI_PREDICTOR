@@ -21,8 +21,8 @@ uvicorn
 # Dashboard
 streamlit
 plotly
-
+seaborn
 # Optional deep learning / classical time-series (Phase 11)
-# tensorflow
-# prophet
+tensorflow
+prophet
 # statsmodels
