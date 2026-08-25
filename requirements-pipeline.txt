@@ -3,7 +3,7 @@ pandas
 numpy
 requests
 python-dotenv
-hopsworks==3.7.0
+hopsworks==5.0.3
 pyarrow
 nest-asyncio
 confluent-kafka

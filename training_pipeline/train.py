@@ -5,6 +5,7 @@ Predicts DELTA AQI (AQI_future - AQI_current).
 
 import os
 import sys
+import time
 import joblib
 import numpy as np
 import pandas as pd
@@ -282,18 +283,30 @@ def train_serverless_horizon(df, target_col):
 
 
 def load_data():
-    try:
-        import hopsworks
-        from config import HOPSWORKS_API_KEY, HOPSWORKS_PROJECT_NAME, FEATURE_GROUP_NAME, FEATURE_GROUP_VERSION
-        print("Loading features from Hopsworks feature store...")
-        project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY, project=HOPSWORKS_PROJECT_NAME)
-        fs = project.get_feature_store()
-        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
-        df = fg.read()
-        print(f"Loaded {len(df)} rows from Hopsworks.")
-        return df
-    except Exception as e:
-        print(f"Could not load from Hopsworks ({e}), falling back to local files...")
+    import hopsworks
+    from config import HOPSWORKS_API_KEY, HOPSWORKS_PROJECT_NAME, FEATURE_GROUP_NAME, FEATURE_GROUP_VERSION
+    print("Loading features from Hopsworks feature store...")
+    hopsworks_error = None
+    for attempt in range(1, 4):
+        try:
+            project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY, project=HOPSWORKS_PROJECT_NAME)
+            fs = project.get_feature_store()
+            fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+            df = fg.read()
+            print(f"Loaded {len(df)} rows from Hopsworks.")
+            return df
+        except Exception as e:
+            hopsworks_error = e
+            print(f"Hopsworks read attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                time.sleep(10)
+
+    print(f"Could not load from Hopsworks ({hopsworks_error}), falling back to local files...")
+    if not os.path.exists(LOCAL_FALLBACK_PATH):
+        raise FileNotFoundError(
+            f"Hopsworks was unavailable after 3 attempts and local fallback is missing: {LOCAL_FALLBACK_PATH}"
+        )
+    else:
         df = pd.read_csv(LOCAL_FALLBACK_PATH)
         print(f"Loaded {len(df)} rows from {LOCAL_FALLBACK_PATH}.")
         if os.path.exists(LIVE_ACCUMULATED_PATH):
