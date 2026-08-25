@@ -13,6 +13,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+import pydeck as pdk
 import os
 from pathlib import Path
 
@@ -123,6 +124,24 @@ st.markdown("""
         padding: 0.4rem;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
     }
+    .aqi-legend {
+        margin-top: 1rem;
+        padding: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+    .legend-title { color: #eef6f4; font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }
+    .legend-bar {
+        height: 11px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #8D99AE 0 20%, #BBB2C9 20% 40%, #EBDAEE 40% 60%, #FEE3CE 60% 80%, #FCBF86 80% 100%);
+    }
+    .legend-labels { display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 0.45rem; color: #cbd8d5; font-size: 0.62rem; }
+    .legend-note { color: #a6bab6; font-size: 0.72rem; line-height: 1.3; margin-top: 1rem; }
     [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -157,6 +176,81 @@ def aqi_alert_level(aqi):
     if aqi > 50:
         return "Moderate", "yellowgreen"
     return "Good", "green"
+
+
+CITY_COORDINATES = {
+    "Faisalabad": (31.4504, 73.1350),
+    "Hyderabad": (25.3960, 68.3578),
+    "Islamabad": (33.6844, 73.0479),
+    "Karachi": (24.8607, 67.0011),
+    "Lahore": (31.5204, 74.3587),
+    "Multan": (30.1575, 71.5249),
+    "Quetta": (30.1798, 66.9750),
+    "Rawalpindi": (33.5651, 73.0169),
+    "Sialkot": (32.4945, 74.5229),
+}
+
+AQI_COLORS = {
+    "Good": [141, 153, 174, 180],
+    "Moderate": [186, 178, 201, 180],
+    "Unhealthy for Sensitive Groups": [235, 218, 238, 180],
+    "Unhealthy": [254, 227, 206, 180],
+    "Hazardous": [252, 191, 134, 180],
+}
+
+
+def aqi_map_color(aqi):
+    if aqi <= 50:
+        return AQI_COLORS["Good"]
+    if aqi <= 100:
+        return AQI_COLORS["Moderate"]
+    if aqi <= 150:
+        return AQI_COLORS["Unhealthy for Sensitive Groups"]
+    if aqi <= 200:
+        return AQI_COLORS["Unhealthy"]
+    return AQI_COLORS["Hazardous"]
+
+
+def render_city_map(latest_by_city, selected_city):
+    map_data = latest_by_city.copy()
+    map_data["latitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][0])
+    map_data["longitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][1])
+    map_data["color"] = map_data["aqi"].apply(aqi_map_color)
+    map_data["radius"] = map_data["city"].eq(selected_city).map({True: 9000, False: 5000})
+    selected = map_data[map_data["city"] == selected_city].copy()
+    selected["color"] = [[255, 200, 117, 70]]
+    selected["radius"] = 18000
+
+    layers = [
+        pdk.Layer(
+            "ScatterplotLayer", data=map_data, get_position="[longitude, latitude]",
+            get_fill_color="color", get_radius="radius", pickable=True,
+            stroked=True, get_line_color=[255, 255, 255, 110], line_width_min_pixels=1,
+        ),
+        pdk.Layer(
+            "ScatterplotLayer", data=selected, get_position="[longitude, latitude]",
+            get_fill_color="color", get_radius="radius", stroked=False,
+        ),
+    ]
+    latitude, longitude = CITY_COORDINATES[selected_city]
+    deck = pdk.Deck(
+        layers=layers,
+        initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=11.2, pitch=0),
+        map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+        tooltip={"html": "<b>{city}</b><br/>AQI: {aqi}", "style": {"color": "white"}},
+    )
+    map_column, legend_column = st.columns([3.4, 1])
+    with map_column:
+        st.pydeck_chart(deck, use_container_width=True)
+    with legend_column:
+        st.markdown("""
+        <div class="aqi-legend">
+            <div class="legend-title">AQI scale</div>
+            <div class="legend-bar"></div>
+            <div class="legend-labels"><span>0-50</span><span>51-100</span><span>101-150</span><span>151-200</span><span>201+</span></div>
+            <div class="legend-note">Selected city is highlighted</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600)
@@ -255,6 +349,9 @@ elif page == "Live AQI":
         cards[1].metric("Temperature", f"{current_temperature:.1f} C" if pd.notna(current_temperature) else "N/A")
         cards[2].metric("Status", level)
         st.markdown(f"<span style='color:{color}; font-weight:bold'>{level}</span>", unsafe_allow_html=True)
+
+        latest_by_city = df.sort_values("time").groupby("city", as_index=False).tail(1)
+        render_city_map(latest_by_city, selected_city)
 
         chart_rows = city_rows.tail(168)
         fig = px.line(chart_rows, x="time", y=["aqi", "temperature_2m"],

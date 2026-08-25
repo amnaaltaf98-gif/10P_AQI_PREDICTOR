@@ -3,6 +3,7 @@ streamlit
 pandas
 requests
 plotly
+pydeck
 xgboost
 scikit-learn
 joblib
