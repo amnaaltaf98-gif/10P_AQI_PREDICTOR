@@ -5,7 +5,7 @@ requests
 python-dotenv
 
 # Feature store
-hopsworks
+hopsworks>=3.4.0
 confluent-kafka
 # Modeling
 scikit-learn
@@ -22,7 +22,6 @@ uvicorn
 streamlit
 plotly
 seaborn
-# Optional deep learning / classical time-series (Phase 11)
-tensorflow
+# Optional deep lear
 prophet
 # statsmodels
