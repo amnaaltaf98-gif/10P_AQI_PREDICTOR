@@ -5,6 +5,7 @@ requests
 python-dotenv
 hopsworks==3.7.0
 pyarrow
+nest-asyncio
 confluent-kafka
 scikit-learn
 xgboost

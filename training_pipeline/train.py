@@ -13,8 +13,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 sys.path.append("../feature_pipeline")
 
-LOCAL_FALLBACK_PATH = "../data/features_all_cities.csv"
-LIVE_ACCUMULATED_PATH = "../data/features_live_accumulated.csv"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOCAL_FALLBACK_PATH = os.path.join(PROJECT_ROOT, "data", "features_all_cities.csv")
+LIVE_ACCUMULATED_PATH = os.path.join(PROJECT_ROOT, "data", "features_live_accumulated.csv")
 
 TARGETS = ["target_aqi_24h", "target_aqi_48h", "target_aqi_72h"]
 
