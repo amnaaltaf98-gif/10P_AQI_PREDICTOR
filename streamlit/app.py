@@ -27,11 +27,120 @@ st.set_page_config(page_title="Pearls AQI Predictor", layout="wide")
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 2rem; padding-bottom: 3rem; }
-    [data-testid="stMetric"] { background: #f4f7f2; border-left: 4px solid #2f855a; padding: 0.8rem; }
-    h1, h2, h3 { color: #173b35; }
+    :root {
+        --ink: #eef6f4;
+        --muted: #a6bab6;
+        --glass: rgba(255, 255, 255, 0.075);
+        --glass-strong: rgba(255, 255, 255, 0.12);
+        --border: rgba(255, 255, 255, 0.14);
+        --accent: #65e6b0;
+        --accent-warm: #ffc875;
+    }
+    .stApp {
+        color: var(--ink);
+        background: #0f172a;
+        background-image: radial-gradient(circle at 82% 8%, rgba(255, 200, 117, 0.13), transparent 28%),
+                          radial-gradient(circle at 8% 84%, rgba(101, 230, 176, 0.10), transparent 30%);
+        overflow-x: hidden;
+    }
+    .stApp::before, .stApp::after {
+        content: "";
+        position: fixed;
+        inset: -35%;
+        pointer-events: none;
+        z-index: 0;
+    }
+    .stApp::before {
+        background: radial-gradient(ellipse at 30% 20%, rgba(255, 203, 132, 0.16), transparent 23%),
+                    radial-gradient(ellipse at 75% 70%, rgba(103, 232, 181, 0.10), transparent 24%);
+        filter: blur(38px);
+        animation: sunlight-drift 18s ease-in-out infinite alternate;
+    }
+    .stApp::after {
+        background: repeating-linear-gradient(118deg, transparent 0 90px, rgba(255,255,255,0.025) 110px 155px, transparent 180px 290px);
+        filter: blur(18px);
+        opacity: 0.65;
+        animation: shadow-pan 17s linear infinite;
+    }
+    @keyframes sunlight-drift {
+        from { transform: translate3d(-4%, -2%, 0) rotate(-2deg); }
+        to { transform: translate3d(5%, 3%, 0) rotate(3deg); }
+    }
+    @keyframes shadow-pan {
+        from { transform: translate3d(-7%, -2%, 0); }
+        to { transform: translate3d(7%, 2%, 0); }
+    }
+    .block-container { position: relative; z-index: 1; padding-top: 2.5rem; padding-bottom: 3.5rem; }
+    h1, h2, h3, p, label, [data-testid="stCaptionContainer"] { color: var(--ink); }
+    h1 { letter-spacing: 0.01em; }
+    [data-testid="stSidebar"] {
+        background: rgba(15, 23, 42, 0.72);
+        border-right: 1px solid var(--border);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+    }
+    [data-testid="stSidebar"] > div:first-child { padding-top: 2rem; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] > label { color: var(--muted); font-weight: 700; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] { gap: 0.45rem; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 0.55rem 0.8rem;
+        transition: all 0.3s ease;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+        background: rgba(101, 230, 176, 0.13);
+        border-color: rgba(101, 230, 176, 0.52);
+        box-shadow: 0 0 22px rgba(101, 230, 176, 0.16);
+        color: var(--ink);
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p { color: var(--accent); }
+    [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255,255,255,0.08);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+    [data-testid="stMetric"] { padding: 1rem; }
+    [data-testid="stMetricLabel"] p { color: var(--muted) !important; font-weight: 700; }
+    [data-testid="stMetricValue"] { color: var(--ink) !important; }
+    [data-testid="stMetricDelta"] { color: var(--accent) !important; }
+    [data-testid="stSelectbox"] > div > div {
+        background: rgba(15, 23, 42, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--ink);
+        transition: all 0.3s ease;
+    }
+    [data-testid="stSelectbox"] > div > div:hover { border-color: var(--accent); box-shadow: 0 0 18px rgba(101, 230, 176, 0.12); }
+    [data-testid="stPlotlyChart"] {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 0.4rem;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+    }
+    [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
+
+
+def style_plot(fig, height=380):
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": "#eef6f4"},
+        title_font={"color": "#eef6f4", "size": 18},
+        height=height,
+        margin={"l": 24, "r": 24, "t": 56, "b": 24},
+        legend={"font": {"color": "#cbd8d5"}},
+        xaxis={"gridcolor": "rgba(255,255,255,0.08)", "zerolinecolor": "rgba(255,255,255,0.12)"},
+        yaxis={"gridcolor": "rgba(255,255,255,0.08)", "zerolinecolor": "rgba(255,255,255,0.12)"},
+    )
+    return fig
 
 
 def aqi_alert_level(aqi):
@@ -120,7 +229,8 @@ if page == "Home":
                     .sort_values("aqi", ascending=False))
         fig = px.bar(overview, x="city", y="aqi", color="aqi", color_continuous_scale="YlOrRd",
                      title="Latest AQI by city", labels={"aqi": "AQI", "city": ""})
-        fig.update_layout(coloraxis_showscale=False, height=380)
+        fig.update_layout(coloraxis_showscale=False)
+        style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
 
 elif page == "Live AQI":
@@ -150,7 +260,8 @@ elif page == "Live AQI":
         fig = px.line(chart_rows, x="time", y=["aqi", "temperature_2m"],
                   title=f"AQI and temperature - {selected_city}",
                   labels={"value": "Reading", "variable": "Metric", "time": ""})
-        fig.update_layout(height=380, legend_title_text="")
+        fig.update_layout(legend_title_text="")
+        style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
 
 elif page == "Forecast":
@@ -171,7 +282,8 @@ elif page == "Forecast":
             fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
             fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", color="Predicted AQI",
                          color_continuous_scale="YlOrRd", title=f"Model forecast for {selected_city}")
-            fig.update_layout(coloraxis_showscale=False, height=380)
+            fig.update_layout(coloraxis_showscale=False)
+            style_plot(fig)
             st.plotly_chart(fig, use_container_width=True)
         elif not API_BASE_URL:
             st.info("Trained model files are not available yet. Run the training pipeline and publish the model files.")
@@ -182,6 +294,7 @@ elif page == "Forecast":
                 forecast = resp.json()["forecast"]
                 fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
                 fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", title=f"Forecast for {selected_city}")
+                style_plot(fig)
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.warning(f"Could not reach prediction API: {e}")
@@ -194,14 +307,17 @@ elif page == "EDA":
         selected_city = st.selectbox("City", cities, key="eda_city")
         city_df = df[df.city == selected_city]
         fig = px.line(city_df, x="time", y="aqi", title=f"AQI over time - {selected_city}")
+        style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
 
         fig2 = px.box(df, x="city", y="aqi", title="AQI distribution by city")
+        style_plot(fig2)
         st.plotly_chart(fig2, use_container_width=True)
 
         temp_fig = px.scatter(df.sample(min(len(df), 3000), random_state=42), x="temperature_2m", y="aqi",
                       color="city", opacity=0.65, title="Temperature and AQI relationship",
                       labels={"temperature_2m": "Temperature (C)", "aqi": "AQI"})
+        style_plot(temp_fig)
         st.plotly_chart(temp_fig, use_container_width=True)
 
 elif page == "Model Explainability":
