@@ -1,0 +1,15 @@
+# Feature pipeline, training, and optional FastAPI service
+pandas
+numpy
+requests
+python-dotenv
+hopsworks>=4.8.0,<5
+confluent-kafka
+scikit-learn
+xgboost
+lightgbm
+catboost
+shap
+fastapi
+uvicorn
+joblib

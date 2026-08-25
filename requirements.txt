@@ -1,27 +1,5 @@
-# Core
-pandas
-numpy
-requests
-python-dotenv
-
-# Feature store
-hopsworks>=3.4.0
-confluent-kafka
-# Modeling
-scikit-learn
-xgboost
-lightgbm
-catboost
-shap
-
-# API
-fastapi
-uvicorn
-
-# Dashboard
+# Streamlit dashboard runtime
 streamlit
+pandas
+requests
 plotly
-seaborn
-# Optional deep lear
-prophet
-# statsmodels

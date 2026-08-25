@@ -3,7 +3,7 @@ Phase 17-18 - Streamlit Dashboard.
 
 Pages: Home, Live AQI, Forecast, EDA, Model Explainability, About.
 Reads from the FastAPI service for live/predicted numbers, and from
-data/features_all_cities.csv for historical charts + EDA.
+the local CSV fallback for current AQI and historical charts + EDA.
 
 Run:
     streamlit run app.py
@@ -13,8 +13,11 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+import os
+from pathlib import Path
 
-API_BASE_URL = "http://localhost:8000"  # point this at your deployed FastAPI URL
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+API_BASE_URL = st.secrets.get("API_BASE_URL", os.environ.get("API_BASE_URL", "")).rstrip("/")
 
 st.set_page_config(page_title="Pearls AQI Predictor", layout="wide")
 
@@ -37,25 +40,11 @@ def aqi_alert_level(aqi):
 
 @st.cache_data(ttl=3600)
 def load_features():
-    # 1. Try fetching directly from Hopsworks Feature Store
-    try:
-        import hopsworks
-        api_key = st.secrets.get("HOPSWORKS_API_KEY") or os.environ.get("HOPSWORKS_API_KEY")
-        proj_name = st.secrets.get("HOPSWORKS_PROJECT_NAME") or os.environ.get("HOPSWORKS_PROJECT_NAME")
-        
-        if api_key and proj_name:
-            project = hopsworks.login(api_key_value=api_key, project=proj_name)
-            fs = project.get_feature_store()
-            fg = fs.get_feature_group(name="aqi_features", version=1) # Adjust FG name/version as defined in config
-            return fg.read()
-    except Exception as e:
-        st.warning(f"Could not connect to Hopsworks Feature Store: {e}")
-
-    # 2. Local fallback
-    try:
-        return pd.read_csv("data/features_all_cities.csv", parse_dates=["time"])
-    except FileNotFoundError:
-        return pd.DataFrame()
+    for filename in ("features_all_cities.csv", "live_buffer.csv"):
+        path = PROJECT_ROOT / "data" / filename
+        if path.exists():
+            return pd.read_csv(path, parse_dates=["time"])
+    return pd.DataFrame()
 
 st.sidebar.title("Pearls AQI Predictor")
 page = st.sidebar.radio("Navigate", ["Home", "Live AQI", "Forecast", "EDA", "Model Explainability", "About"])
@@ -77,8 +66,9 @@ elif page == "Live AQI":
     else:
         selected_city = st.selectbox("City", cities)
         try:
-            resp = requests.get(f"{API_BASE_URL}/predict/{selected_city}", timeout=5)
-            resp.raise_for_status()
+            if API_BASE_URL:
+                resp = requests.get(f"{API_BASE_URL}/predict/{selected_city}", timeout=5)
+                resp.raise_for_status()
             current_aqi = df[df.city == selected_city].sort_values("time").iloc[-1]["aqi"]
         except Exception:
             current_aqi = df[df.city == selected_city].sort_values("time").iloc[-1]["aqi"] if not df.empty else None
@@ -93,15 +83,18 @@ elif page == "Forecast":
         st.info("No feature data found yet.")
     else:
         selected_city = st.selectbox("City", cities, key="forecast_city")
-        try:
-            resp = requests.get(f"{API_BASE_URL}/predict/{selected_city}", timeout=5)
-            resp.raise_for_status()
-            forecast = resp.json()["forecast"]
-            fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
-            fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", title=f"Forecast for {selected_city}")
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.warning(f"Could not reach prediction API: {e}")
+        if not API_BASE_URL:
+            st.info("Forecasts require a deployed prediction API. Set API_BASE_URL in Streamlit secrets.")
+        else:
+            try:
+                resp = requests.get(f"{API_BASE_URL}/predict/{selected_city}", timeout=5)
+                resp.raise_for_status()
+                forecast = resp.json()["forecast"]
+                fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
+                fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", title=f"Forecast for {selected_city}")
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.warning(f"Could not reach prediction API: {e}")
 
 elif page == "EDA":
     st.title("Exploratory Data Analysis")
@@ -120,7 +113,7 @@ elif page == "Model Explainability":
     st.title("Model Explainability (SHAP)")
     st.write("Feature importance plots generated during training. Run training_pipeline/train.py to (re)generate these.")
     for horizon in ["24h", "48h", "72h"]:
-        img_path = f"../models/shap_target_aqi_{horizon}.png"
+        img_path = PROJECT_ROOT / "models" / f"shap_target_aqi_{horizon}.png"
         try:
             st.image(img_path, caption=f"SHAP summary - {horizon} forecast")
         except Exception:

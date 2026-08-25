@@ -1,6 +1,8 @@
 name: Hourly Feature Pipeline
 
 on:
+  schedule:
+    - cron: "0 * * * *"  # every hour
   workflow_dispatch: {}    # allows manual trigger from the Actions tab
 
 permissions:
@@ -19,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-pipeline.txt
 
       - name: Fetch live data and push to Hopsworks
         working-directory: feature_pipeline
