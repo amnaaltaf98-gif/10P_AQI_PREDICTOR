@@ -248,6 +248,23 @@ def train_serverless_horizon(df, target_col):
     model = XGBRegressor(**XGB_CONFIG)
     model.fit(X_fit, y_fit, eval_set=[(X_val, y_val)], verbose=False)
 
+    # Save a compact SHAP summary for the dashboard when the optional package
+    # is available. Training and predictions do not depend on this plot.
+    try:
+        import shap
+        import matplotlib.pyplot as plt
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_test)
+        plt.figure(figsize=(10, 6))
+        shap.summary_plot(shap_values, X_test, show=False, max_display=15)
+        plt.tight_layout()
+        plot_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", f"shap_{target_col}.png")
+        plt.savefig(plot_path, dpi=120, bbox_inches="tight")
+        plt.close()
+    except Exception as exc:
+        print(f"SHAP plot unavailable for {target_col}: {exc}")
+
     if PREDICT_DELTA:
         preds = np.clip(current_aqi_test + model.predict(X_test), 0, None)
     else:

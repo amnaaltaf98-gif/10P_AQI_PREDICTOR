@@ -10,6 +10,7 @@ xgboost
 lightgbm
 catboost
 shap
+matplotlib
 fastapi
 uvicorn
 joblib

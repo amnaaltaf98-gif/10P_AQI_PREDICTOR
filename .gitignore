@@ -6,7 +6,11 @@ data/features_all_cities.csv
 !data/live_buffer.csv
 !data/features_live_accumulated.csv
 models/*.pkl
+!models/target_aqi_24h_delta_xgb.pkl
+!models/target_aqi_48h_delta_xgb.pkl
+!models/target_aqi_72h_delta_xgb.pkl
 models/*.png
+!models/shap_target_aqi_*.png
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
