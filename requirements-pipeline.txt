@@ -3,7 +3,8 @@ pandas
 numpy
 requests
 python-dotenv
-hopsworks>=4.8.0,<5
+hopsworks==3.7.0
+pyarrow
 confluent-kafka
 scikit-learn
 xgboost
