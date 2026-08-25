@@ -37,12 +37,25 @@ def aqi_alert_level(aqi):
 
 @st.cache_data(ttl=3600)
 def load_features():
+    # 1. Try fetching directly from Hopsworks Feature Store
     try:
-        df = pd.read_csv("../data/features_all_cities.csv", parse_dates=["time"])
-        return df
+        import hopsworks
+        api_key = st.secrets.get("HOPSWORKS_API_KEY") or os.environ.get("HOPSWORKS_API_KEY")
+        proj_name = st.secrets.get("HOPSWORKS_PROJECT_NAME") or os.environ.get("HOPSWORKS_PROJECT_NAME")
+        
+        if api_key and proj_name:
+            project = hopsworks.login(api_key_value=api_key, project=proj_name)
+            fs = project.get_feature_store()
+            fg = fs.get_feature_group(name="aqi_features", version=1) # Adjust FG name/version as defined in config
+            return fg.read()
+    except Exception as e:
+        st.warning(f"Could not connect to Hopsworks Feature Store: {e}")
+
+    # 2. Local fallback
+    try:
+        return pd.read_csv("data/features_all_cities.csv", parse_dates=["time"])
     except FileNotFoundError:
         return pd.DataFrame()
-
 
 st.sidebar.title("Pearls AQI Predictor")
 page = st.sidebar.radio("Navigate", ["Home", "Live AQI", "Forecast", "EDA", "Model Explainability", "About"])

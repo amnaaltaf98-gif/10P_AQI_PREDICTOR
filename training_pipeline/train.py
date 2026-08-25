@@ -289,26 +289,59 @@ def load_data():
         return df
 
 
+import tempfile
+
 def main():
-    os.makedirs("../models", exist_ok=True)
+    # 1. Ensure path resolution works regardless of working directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    sys.path.append(os.path.join(project_root, "feature_pipeline"))
+
     df = load_data()
     df["time"] = pd.to_datetime(df["time"])
     df = df.sort_values("time")
 
     if USE_LAST_N_DAYS is not None:
         cutoff = df["time"].max() - pd.Timedelta(days=USE_LAST_N_DAYS)
-        before = len(df)
         df = df[df["time"] >= cutoff].reset_index(drop=True)
-        print(f"USE_LAST_N_DAYS={USE_LAST_N_DAYS}: filtered {before} -> {len(df)} rows "
-              f"({df['time'].min()} to {df['time'].max()})")
 
-    print(f"PREDICT_DELTA={PREDICT_DELTA}")
+    # 2. Connect to Hopsworks Model Registry
+    try:
+        import hopsworks
+        from config import HOPSWORKS_API_KEY, HOPSWORKS_PROJECT_NAME
+        project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY, project=HOPSWORKS_PROJECT_NAME)
+        mr = project.get_model_registry()
+        use_hopsworks_mr = True
+    except Exception as e:
+        print(f"Hopsworks Model Registry unavailable ({e}). Saving locally only.")
+        use_hopsworks_mr = False
+
+    models_dir = os.path.join(project_root, "models")
+    os.makedirs(models_dir, exist_ok=True)
 
     for target_col in TARGETS:
         print(f"\nTraining for {target_col}...")
         model, metrics = train_serverless_horizon(df, target_col)
-        joblib.dump(model, f"../models/{target_col}_delta_xgb.pkl", compress=3)
+        
+        file_name = f"{target_col}_delta_xgb.pkl"
+        local_filepath = os.path.join(models_dir, file_name)
+        
+        # Save model locally
+        joblib.dump(model, local_filepath, compress=3)
 
+        # Register model in Hopsworks Model Registry
+        if use_hopsworks_mr:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_model_path = os.path.join(tmp_dir, file_name)
+                joblib.dump(model, tmp_model_path, compress=3)
+                
+                hw_model = mr.python.create_model(
+                    name=f"aqi_{target_col}_xgb",
+                    metrics=metrics,
+                    description=f"XGBoost model predicting {target_col}"
+                )
+                hw_model.save(tmp_model_path)
+                print(f"Successfully pushed {target_col} model to Hopsworks Model Registry!")
 
 if __name__ == "__main__":
     main()
