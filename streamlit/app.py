@@ -39,7 +39,7 @@ st.markdown("""
     }
     .stApp {
         color: var(--ink);
-        background: #0f172a;
+        background: #1e2029;
         background-image: radial-gradient(circle at 82% 8%, rgba(255, 200, 117, 0.13), transparent 28%),
                           radial-gradient(circle at 8% 84%, rgba(101, 230, 176, 0.10), transparent 30%);
         overflow-x: hidden;
@@ -75,28 +75,31 @@ st.markdown("""
     h1, h2, h3, p, label, [data-testid="stCaptionContainer"] { color: var(--ink); }
     h1 { letter-spacing: 0.01em; }
     [data-testid="stSidebar"] {
-        background: rgba(15, 23, 42, 0.72);
-        border-right: 1px solid var(--border);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+        display: none;
     }
-    [data-testid="stSidebar"] > div:first-child { padding-top: 2rem; }
-    [data-testid="stSidebar"] [data-testid="stRadio"] > label { color: var(--muted); font-weight: 700; }
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] { gap: 0.45rem; }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+    [data-testid="stTabs"] [role="tablist"] {
+        gap: 0.5rem;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+        padding: 0.35rem;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        backdrop-filter: blur(12px);
+    }
+    [data-testid="stTabs"] button[role="tab"] {
         border: 1px solid transparent;
         border-radius: 999px;
-        padding: 0.55rem 0.8rem;
+        color: var(--muted);
+        padding: 0.55rem 1rem;
         transition: all 0.3s ease;
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover,
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-        background: rgba(101, 230, 176, 0.13);
-        border-color: rgba(101, 230, 176, 0.52);
-        box-shadow: 0 0 22px rgba(101, 230, 176, 0.16);
-        color: var(--ink);
+    [data-testid="stTabs"] button[role="tab"]:hover,
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        color: #1e2029;
+        background: var(--accent-warm);
+        border-color: rgba(252,191,134,0.8);
+        box-shadow: 0 0 24px rgba(252,191,134,0.25);
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p { color: var(--accent); }
     [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {
         background: var(--glass);
         border: 1px solid var(--border);
@@ -211,15 +214,17 @@ def aqi_map_color(aqi):
     return AQI_COLORS["Hazardous"]
 
 
-def render_city_map(latest_by_city, selected_city):
+def render_city_map(latest_by_city, selected_city=None):
     map_data = latest_by_city.copy()
     map_data["latitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][0])
     map_data["longitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][1])
     map_data["color"] = map_data["aqi"].apply(aqi_map_color)
-    map_data["radius"] = map_data["city"].eq(selected_city).map({True: 9000, False: 5000})
-    selected = map_data[map_data["city"] == selected_city].copy()
-    selected["color"] = [[255, 200, 117, 70]]
-    selected["radius"] = 18000
+    map_data["radius"] = 5000
+    halos = map_data.copy()
+    halos["color"] = halos["city"].eq(selected_city).map(
+        {True: [252, 191, 134, 90], False: [255, 255, 255, 35]}
+    )
+    halos["radius"] = halos["city"].eq(selected_city).map({True: 18000, False: 9000})
 
     layers = [
         pdk.Layer(
@@ -228,14 +233,17 @@ def render_city_map(latest_by_city, selected_city):
             stroked=True, get_line_color=[255, 255, 255, 110], line_width_min_pixels=1,
         ),
         pdk.Layer(
-            "ScatterplotLayer", data=selected, get_position="[longitude, latitude]",
+            "ScatterplotLayer", data=halos, get_position="[longitude, latitude]",
             get_fill_color="color", get_radius="radius", stroked=False,
         ),
     ]
-    latitude, longitude = CITY_COORDINATES[selected_city]
+    if selected_city in CITY_COORDINATES:
+        latitude, longitude, zoom = (*CITY_COORDINATES[selected_city], 10.5)
+    else:
+        latitude, longitude, zoom = 30.3753, 69.3451, 5.5
     deck = pdk.Deck(
         layers=layers,
-        initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=11.2, pitch=0),
+        initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=zoom, pitch=0),
         map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
         tooltip={"html": "<b>{city}</b><br/>AQI: {aqi}", "style": {"color": "white"}},
     )
@@ -301,13 +309,12 @@ def predict_locally(features):
             predictions[city][horizon] = round(float(max(value, 0)), 1)
     return predictions
 
-st.sidebar.title("Pearls AQI Predictor")
-page = st.sidebar.radio("Navigate", ["Home", "Live AQI", "Forecast", "EDA", "Model Explainability", "About"])
-
 df = load_features()
 cities = sorted(df["city"].unique()) if not df.empty else []
 
-if page == "Home":
+tabs = st.tabs(["Home", "Live AQI", "Forecast", "EDA", "Model Explainability", "About"])
+
+with tabs[0]:
     st.title("Pearls AQI Predictor")
     st.write("Serverless AQI forecasting for major Pakistani cities, with a feature store, model registry, and SHAP-based explainability.")
     if cities:
@@ -326,8 +333,11 @@ if page == "Home":
         fig.update_layout(coloraxis_showscale=False)
         style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Pakistan air-quality map")
+        st.caption("Select a city on the Live AQI tab to focus the map.")
+        render_city_map(overview, None)
 
-elif page == "Live AQI":
+with tabs[1]:
     st.title("Live AQI")
     if not cities:
         st.info("No feature data found yet. Run the backfill and feature pipeline first.")
@@ -361,7 +371,7 @@ elif page == "Live AQI":
         style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
 
-elif page == "Forecast":
+with tabs[2]:
     st.title("3-Day Forecast")
     if not cities:
         st.info("No feature data found yet.")
@@ -396,7 +406,7 @@ elif page == "Forecast":
             except Exception as e:
                 st.warning(f"Could not reach prediction API: {e}")
 
-elif page == "EDA":
+with tabs[3]:
     st.title("Exploratory Data Analysis")
     if df.empty:
         st.info("No feature data found yet.")
@@ -417,7 +427,7 @@ elif page == "EDA":
         style_plot(temp_fig)
         st.plotly_chart(temp_fig, use_container_width=True)
 
-elif page == "Model Explainability":
+with tabs[4]:
     st.title("Model Explainability (SHAP)")
     st.write("Feature contribution plots generated by the training pipeline.")
     for horizon in ["24h", "48h", "72h"]:
@@ -427,7 +437,7 @@ elif page == "Model Explainability":
         except Exception:
             st.info(f"No SHAP plot found yet for {horizon}. Train the model first.")
 
-elif page == "About":
+with tabs[5]:
     st.title("About this project")
     st.write("""
     Pearls AQI Predictor is an end-to-end, serverless ML system forecasting AQI
