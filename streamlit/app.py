@@ -24,24 +24,43 @@ sys.path.insert(0, str(PROJECT_ROOT / "feature_pipeline"))
 sys.path.insert(0, str(PROJECT_ROOT / "training_pipeline"))
 API_BASE_URL = st.secrets.get("API_BASE_URL", os.environ.get("API_BASE_URL", "")).rstrip("/")
 
-st.set_page_config(page_title="Pearls AQI Predictor", layout="wide")
+st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sidebar_state="collapsed")
 
+# ---------------------------------------------------------------------------
+# THEME
+# Palette kept from the original build: deep navy base, mint accent, warm
+# amber accent, frosted-glass panels. Values below just push translucency
+# and contrast further so panels read as "glass over a map" rather than
+# solid cards, and add a couple of missing states (buttons, tabs, sidebar
+# kill-switch) that were leaking default Streamlit styling before.
+# ---------------------------------------------------------------------------
 st.markdown("""
 <style>
     :root {
         --ink: #eef6f4;
         --muted: #a6bab6;
-        --glass: rgba(255, 255, 255, 0.075);
-        --glass-strong: rgba(255, 255, 255, 0.12);
+        --glass: rgba(255, 255, 255, 0.055);
+        --glass-strong: rgba(255, 255, 255, 0.10);
+        --glass-hover: rgba(255, 255, 255, 0.14);
         --border: rgba(255, 255, 255, 0.14);
         --accent: #65e6b0;
         --accent-warm: #ffc875;
+        --navy: #1e2029;
     }
+
+    /* ---- kill Streamlit's default chrome so tabs are the only nav ---- */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarNav"],
+    [data-testid="collapsedControl"],
+    header[data-testid="stHeader"] { display: none !important; }
+
     .stApp {
         color: var(--ink);
-        background: #1e2029;
-        background-image: radial-gradient(circle at 82% 8%, rgba(255, 200, 117, 0.13), transparent 28%),
-                          radial-gradient(circle at 8% 84%, rgba(101, 230, 176, 0.10), transparent 30%);
+        background: var(--navy);
+        background-image:
+            radial-gradient(circle at 82% 8%, rgba(255, 200, 117, 0.14), transparent 30%),
+            radial-gradient(circle at 8% 84%, rgba(101, 230, 176, 0.11), transparent 32%),
+            radial-gradient(circle at 50% 50%, rgba(101, 230, 176, 0.03), transparent 60%);
         overflow-x: hidden;
     }
     .stApp::before, .stApp::after {
@@ -71,71 +90,117 @@ st.markdown("""
         from { transform: translate3d(-7%, -2%, 0); }
         to { transform: translate3d(7%, 2%, 0); }
     }
-    .block-container { position: relative; z-index: 1; padding-top: 2.5rem; padding-bottom: 3.5rem; }
+
+    .block-container { position: relative; z-index: 1; padding-top: 2rem; padding-bottom: 3.5rem; max-width: 1200px; }
     h1, h2, h3, p, label, [data-testid="stCaptionContainer"] { color: var(--ink); }
-    h1 { letter-spacing: 0.01em; }
-    [data-testid="stSidebar"] {
-        display: none;
-    }
+    h1 { letter-spacing: 0.01em; font-weight: 800; }
+
+    /* ---- horizontal pill tabs (this IS the nav, no sidebar) ---- */
     [data-testid="stTabs"] [role="tablist"] {
-        gap: 0.5rem;
-        border-bottom: 1px solid rgba(255,255,255,0.12);
-        padding: 0.35rem;
-        background: rgba(255,255,255,0.05);
+        gap: 0.4rem;
+        border-bottom: none;
+        padding: 0.4rem;
+        background: var(--glass);
         border: 1px solid var(--border);
         border-radius: 999px;
-        backdrop-filter: blur(12px);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        flex-wrap: wrap;
     }
     [data-testid="stTabs"] button[role="tab"] {
         border: 1px solid transparent;
         border-radius: 999px;
         color: var(--muted);
-        padding: 0.55rem 1rem;
-        transition: all 0.3s ease;
+        padding: 0.55rem 1.1rem;
+        font-weight: 600;
+        transition: all 0.25s ease;
+        background: transparent;
     }
-    [data-testid="stTabs"] button[role="tab"]:hover,
+    [data-testid="stTabs"] button[role="tab"]:hover {
+        color: var(--ink);
+        background: rgba(255,255,255,0.08);
+    }
     [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
         color: #1e2029;
         background: var(--accent-warm);
         border-color: rgba(252,191,134,0.8);
-        box-shadow: 0 0 24px rgba(252,191,134,0.25);
+        box-shadow: 0 0 24px rgba(252,191,134,0.28);
     }
+
+    /* ---- glass panels ---- */
     [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {
         background: var(--glass);
         border: 1px solid var(--border);
         border-radius: 16px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255,255,255,0.08);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255,255,255,0.06);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
     }
     [data-testid="stMetric"] { padding: 1rem; }
     [data-testid="stMetricLabel"] p { color: var(--muted) !important; font-weight: 700; }
     [data-testid="stMetricValue"] { color: var(--ink) !important; }
     [data-testid="stMetricDelta"] { color: var(--accent) !important; }
+
+    /* ---- translucent inputs ---- */
     [data-testid="stSelectbox"] > div > div {
-        background: rgba(15, 23, 42, 0.72);
+        background: rgba(255, 255, 255, 0.06) !important;
         border: 1px solid var(--border);
         border-radius: 12px;
         color: var(--ink);
-        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        transition: all 0.25s ease;
     }
-    [data-testid="stSelectbox"] > div > div:hover { border-color: var(--accent); box-shadow: 0 0 18px rgba(101, 230, 176, 0.12); }
+    [data-testid="stSelectbox"] > div > div:hover {
+        border-color: var(--accent);
+        background: rgba(255,255,255,0.09) !important;
+        box-shadow: 0 0 18px rgba(101, 230, 176, 0.15);
+    }
+
+    /* ---- translucent buttons ---- */
+    .stButton > button, .stDownloadButton > button {
+        background: var(--glass-strong) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--ink) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px);
+        transition: all 0.25s ease;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: var(--glass-hover) !important;
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 18px rgba(101, 230, 176, 0.18);
+    }
+
     [data-testid="stPlotlyChart"] {
         background: var(--glass);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 0.4rem;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
-    }
-    .aqi-legend {
-        margin-top: 1rem;
-        padding: 1rem;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.08);
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.08);
         backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* ---- hero map wrapper: pulls the following row of glass cards up
+       over its own bottom edge so they read as "floating on the map" ---- */
+    .hero-map-wrap {
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        margin-bottom: -3.2rem;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-card-row { position: relative; z-index: 2; margin-top: 1.2rem; }
+
+    .aqi-legend {
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--glass);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
     }
     .legend-title { color: #eef6f4; font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }
     .legend-bar {
@@ -166,7 +231,7 @@ def style_plot(fig, height=380):
 
 
 def aqi_alert_level(aqi):
-    if aqi is None:
+    if aqi is None or pd.isna(aqi):
         return "Unknown", "gray"
     if aqi > 300:
         return "Hazardous", "darkred"
@@ -181,6 +246,7 @@ def aqi_alert_level(aqi):
     return "Good", "green"
 
 
+# 9 cities - keep this in sync with the copy on the About tab below.
 CITY_COORDINATES = {
     "Faisalabad": (31.4504, 73.1350),
     "Hyderabad": (25.3960, 68.3578),
@@ -194,11 +260,11 @@ CITY_COORDINATES = {
 }
 
 AQI_COLORS = {
-    "Good": [141, 153, 174, 180],
-    "Moderate": [186, 178, 201, 180],
-    "Unhealthy for Sensitive Groups": [235, 218, 238, 180],
-    "Unhealthy": [254, 227, 206, 180],
-    "Hazardous": [252, 191, 134, 180],
+    "Good": [141, 153, 174, 190],
+    "Moderate": [186, 178, 201, 190],
+    "Unhealthy for Sensitive Groups": [235, 218, 238, 190],
+    "Unhealthy": [254, 227, 206, 190],
+    "Hazardous": [252, 191, 134, 190],
 }
 
 
@@ -214,49 +280,72 @@ def aqi_map_color(aqi):
     return AQI_COLORS["Hazardous"]
 
 
-def render_city_map(latest_by_city, selected_city=None):
+def render_city_map(latest_by_city, selected_city=None, height=None):
     map_data = latest_by_city.copy()
     map_data["latitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][0])
     map_data["longitude"] = map_data["city"].map(lambda city: CITY_COORDINATES[city][1])
     map_data["color"] = map_data["aqi"].apply(aqi_map_color)
     map_data["radius"] = 5000
-    halos = map_data.copy()
-    halos["color"] = halos["city"].eq(selected_city).map(
-        {True: [252, 191, 134, 90], False: [255, 255, 255, 35]}
+
+    # Two concentric "glow" rings for the selected city, low opacity, drawn
+    # BEHIND the markers (this is the fix: the original build drew these on
+    # top of the markers, so the bigger halo just erased the dot underneath
+    # instead of glowing around it).
+    glow_outer = map_data.copy()
+    glow_outer["color"] = glow_outer["city"].eq(selected_city).map(
+        {True: [255, 200, 117, 55], False: [0, 0, 0, 0]}
     )
-    halos["radius"] = halos["city"].eq(selected_city).map({True: 18000, False: 9000})
+    glow_outer["radius"] = glow_outer["city"].eq(selected_city).map({True: 32000, False: 0})
+
+    glow_inner = map_data.copy()
+    glow_inner["color"] = glow_inner["city"].eq(selected_city).map(
+        {True: [255, 200, 117, 110], False: [255, 255, 255, 30]}
+    )
+    glow_inner["radius"] = glow_inner["city"].eq(selected_city).map({True: 16000, False: 8000})
 
     layers = [
+        # halos first -> render underneath
+        pdk.Layer(
+            "ScatterplotLayer", data=glow_outer, get_position="[longitude, latitude]",
+            get_fill_color="color", get_radius="radius", stroked=False,
+        ),
+        pdk.Layer(
+            "ScatterplotLayer", data=glow_inner, get_position="[longitude, latitude]",
+            get_fill_color="color", get_radius="radius", stroked=False,
+        ),
+        # markers last -> render on top, always visible
         pdk.Layer(
             "ScatterplotLayer", data=map_data, get_position="[longitude, latitude]",
             get_fill_color="color", get_radius="radius", pickable=True,
-            stroked=True, get_line_color=[255, 255, 255, 110], line_width_min_pixels=1,
-        ),
-        pdk.Layer(
-            "ScatterplotLayer", data=halos, get_position="[longitude, latitude]",
-            get_fill_color="color", get_radius="radius", stroked=False,
+            stroked=True, get_line_color=[255, 255, 255, 130], line_width_min_pixels=1.5,
         ),
     ]
+
     if selected_city in CITY_COORDINATES:
-        latitude, longitude, zoom = (*CITY_COORDINATES[selected_city], 10.5)
+        latitude, longitude, zoom = (*CITY_COORDINATES[selected_city], 9.5)
     else:
-        latitude, longitude, zoom = 30.3753, 69.3451, 5.5
+        # full-country view
+        latitude, longitude, zoom = 30.3753, 69.3451, 4.7
+
     deck = pdk.Deck(
         layers=layers,
         initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=zoom, pitch=0),
         map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
         tooltip={"html": "<b>{city}</b><br/>AQI: {aqi}", "style": {"color": "white"}},
     )
+
     map_column, legend_column = st.columns([3.4, 1])
     with map_column:
-        st.pydeck_chart(deck, use_container_width=True)
+        st.markdown('<div class="hero-map-wrap">', unsafe_allow_html=True)
+        st.pydeck_chart(deck, use_container_width=True, height=height or 460)
+        st.markdown('</div>', unsafe_allow_html=True)
     with legend_column:
         st.markdown("""
         <div class="aqi-legend">
             <div class="legend-title">AQI scale</div>
             <div class="legend-bar"></div>
             <div class="legend-labels"><span>0-50</span><span>51-100</span><span>101-150</span><span>151-200</span><span>201+</span></div>
-            <div class="legend-note">Selected city is highlighted</div>
+            <div class="legend-note">Selected city glows amber and the map zooms in on it.</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -309,6 +398,23 @@ def predict_locally(features):
             predictions[city][horizon] = round(float(max(value, 0)), 1)
     return predictions
 
+
+def fetch_live_aqi(city):
+    """Try the FastAPI service for a fresh reading; fall back to the local
+    CSV's latest row on any failure. Previously the API response was
+    fetched and immediately discarded - this now actually uses it."""
+    if API_BASE_URL:
+        try:
+            resp = requests.get(f"{API_BASE_URL}/predict/{city}", timeout=5)
+            resp.raise_for_status()
+            payload = resp.json()
+            if "current_aqi" in payload:
+                return payload["current_aqi"], "Live API"
+        except Exception:
+            pass
+    return None, None
+
+
 df = load_features()
 cities = sorted(df["city"].unique()) if not df.empty else []
 
@@ -318,24 +424,29 @@ with tabs[0]:
     st.title("Pearls AQI Predictor")
     st.write("Serverless AQI forecasting for major Pakistani cities, with a feature store, model registry, and SHAP-based explainability.")
     if cities:
+        overview = (df.sort_values("time").groupby("city", as_index=False).tail(1)
+                    .sort_values("aqi", ascending=False))
+
+        # hero map first - country-wide view, no city selected yet
+        render_city_map(overview, None, height=440)
+
         latest = df.sort_values("time").iloc[-1]
+        st.markdown('<div class="hero-card-row">', unsafe_allow_html=True)
         metric_columns = st.columns(4)
         metric_columns[0].metric("Cities tracked", len(cities))
         metric_columns[1].metric("Feature rows", f"{len(df):,}")
         metric_columns[2].metric("Latest AQI", f"{latest['aqi']:.0f}")
         metric_columns[3].metric("Temperature", f"{latest['temperature_2m']:.1f} C")
+        st.markdown('</div>', unsafe_allow_html=True)
         st.caption(f"Data source: {data_source()} | Latest record: {latest['time']:%Y-%m-%d %H:%M}")
 
-        overview = (df.sort_values("time").groupby("city", as_index=False).tail(1)
-                    .sort_values("aqi", ascending=False))
         fig = px.bar(overview, x="city", y="aqi", color="aqi", color_continuous_scale="YlOrRd",
                      title="Latest AQI by city", labels={"aqi": "AQI", "city": ""})
         fig.update_layout(coloraxis_showscale=False)
         style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
-        st.subheader("Pakistan air-quality map")
-        st.caption("Select a city on the Live AQI tab to focus the map.")
-        render_city_map(overview, None)
+    else:
+        st.info("No feature data found yet. Run the backfill and feature pipeline first.")
 
 with tabs[1]:
     st.title("Live AQI")
@@ -344,21 +455,24 @@ with tabs[1]:
     else:
         selected_city = st.selectbox("City", cities)
         city_rows = df[df.city == selected_city].sort_values("time")
-        try:
-            if API_BASE_URL:
-                resp = requests.get(f"{API_BASE_URL}/predict/{selected_city}", timeout=5)
-                resp.raise_for_status()
-            current_aqi = city_rows.iloc[-1]["aqi"]
-        except Exception:
-            current_aqi = df[df.city == selected_city].sort_values("time").iloc[-1]["aqi"] if not df.empty else None
+
+        live_aqi, source_label = fetch_live_aqi(selected_city)
+        if live_aqi is not None:
+            current_aqi = live_aqi
+        else:
+            current_aqi = city_rows.iloc[-1]["aqi"] if not city_rows.empty else None
+            source_label = "Local feature store"
 
         level, color = aqi_alert_level(current_aqi)
-        current_temperature = city_rows.iloc[-1].get("temperature_2m")
+        current_temperature = city_rows.iloc[-1].get("temperature_2m") if not city_rows.empty else None
+
         cards = st.columns(3)
         cards[0].metric("Current AQI", f"{current_aqi:.0f}" if pd.notna(current_aqi) else "N/A")
         cards[1].metric("Temperature", f"{current_temperature:.1f} C" if pd.notna(current_temperature) else "N/A")
         cards[2].metric("Status", level)
-        st.markdown(f"<span style='color:{color}; font-weight:bold'>{level}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='color:{color}; font-weight:bold'>{level}</span> "
+                     f"<span style='color:var(--muted); font-size:0.8rem;'>&middot; source: {source_label}</span>",
+                     unsafe_allow_html=True)
 
         latest_by_city = df.sort_values("time").groupby("city", as_index=False).tail(1)
         render_city_map(latest_by_city, selected_city)
@@ -441,7 +555,7 @@ with tabs[5]:
     st.title("About this project")
     st.write("""
     Pearls AQI Predictor is an end-to-end, serverless ML system forecasting AQI
-    24h / 48h / 72h ahead for 10 major Pakistani cities.
+    24h / 48h / 72h ahead for 9 major Pakistani cities.
 
     Pipeline: Open-Meteo (historical + backfill) -> feature engineering ->
     Hopsworks feature store -> LightGBM/XGBoost/RandomForest model comparison ->
