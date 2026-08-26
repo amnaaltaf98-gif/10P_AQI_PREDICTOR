@@ -1,7 +1,7 @@
 """
 Phase 17-18 - Streamlit Dashboard.
 
-Pages: Home, Live AQI, Forecast, EDA, Model Explainability, About.
+Pages: Home, Live AQI, Forecast, EDA, Model Explainability.
 Reads from the FastAPI service for live/predicted numbers, and from
 the local CSV fallback for current AQI and historical charts + EDA.
 
@@ -45,7 +45,10 @@ st.markdown("""
         --border: rgba(255, 255, 255, 0.14);
         --accent: #65e6b0;
         --accent-warm: #ffc875;
-        --navy: #1e2029;
+        /* Matches the Carto "dark-matter" basemap tone used by the pydeck
+           map (near-black, faint warm gray) instead of the old blue-navy,
+           so panels and map read as one continuous surface. */
+        --navy: #0d0d0f;
     }
 
     /* ---- kill Streamlit's default chrome so tabs are the only nav ---- */
@@ -95,30 +98,31 @@ st.markdown("""
     h1, h2, h3, p, label, [data-testid="stCaptionContainer"] { color: var(--ink); }
     h1 { letter-spacing: 0.01em; font-weight: 800; }
 
-    /* ---- horizontal pill tabs (this IS the nav, no sidebar) ---- */
+    /* ---- tabs shown as separate standalone buttons, not one joined bar ---- */
     [data-testid="stTabs"] [role="tablist"] {
-        gap: 0.4rem;
+        gap: 0.6rem;
         border-bottom: none;
-        padding: 0.4rem;
-        background: var(--glass);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+        padding: 0;
+        background: transparent;
+        border: none;
         flex-wrap: wrap;
     }
     [data-testid="stTabs"] button[role="tab"] {
-        border: 1px solid transparent;
-        border-radius: 999px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
         color: var(--muted);
-        padding: 0.55rem 1.1rem;
+        padding: 0.6rem 1.2rem;
         font-weight: 600;
         transition: all 0.25s ease;
-        background: transparent;
+        background: var(--glass);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.18);
     }
     [data-testid="stTabs"] button[role="tab"]:hover {
         color: var(--ink);
-        background: rgba(255,255,255,0.08);
+        background: var(--glass-hover);
+        border-color: rgba(255,255,255,0.22);
     }
     [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
         color: #1e2029;
@@ -126,6 +130,7 @@ st.markdown("""
         border-color: rgba(252,191,134,0.8);
         box-shadow: 0 0 24px rgba(252,191,134,0.28);
     }
+    [data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none; }
 
     /* ---- glass panels ---- */
     [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {
@@ -138,7 +143,17 @@ st.markdown("""
     }
     [data-testid="stMetric"] { padding: 1rem; }
     [data-testid="stMetricLabel"] p { color: var(--muted) !important; font-weight: 700; }
-    [data-testid="stMetricValue"] { color: var(--ink) !important; }
+    /* Long status strings like "Unhealthy for Sensitive Groups" were being
+       cut off - Streamlit's metric value is single-line/overflow-hidden by
+       default. Let it wrap and shrink instead of clipping. */
+    [data-testid="stMetricValue"] {
+        color: var(--ink) !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        line-height: 1.2;
+        font-size: clamp(1.05rem, 2.4vw, 1.6rem) !important;
+    }
     [data-testid="stMetricDelta"] { color: var(--accent) !important; }
 
     /* ---- translucent inputs ---- */
@@ -418,26 +433,20 @@ def fetch_live_aqi(city):
 df = load_features()
 cities = sorted(df["city"].unique()) if not df.empty else []
 
-tabs = st.tabs(["Home", "Live AQI", "Forecast", "EDA", "Model Explainability", "About"])
+tabs = st.tabs(["Home", "Live AQI", "Forecast", "EDA", "Model Explainability"])
 
 with tabs[0]:
     st.title("Pearls AQI Predictor")
-    st.write("Serverless AQI forecasting for major Pakistani cities, with a feature store, model registry, and SHAP-based explainability.")
     if cities:
         overview = (df.sort_values("time").groupby("city", as_index=False).tail(1)
                     .sort_values("aqi", ascending=False))
 
-        # hero map first - country-wide view, no city selected yet
-        render_city_map(overview, None, height=440)
-
         latest = df.sort_values("time").iloc[-1]
-        st.markdown('<div class="hero-card-row">', unsafe_allow_html=True)
         metric_columns = st.columns(4)
         metric_columns[0].metric("Cities tracked", len(cities))
         metric_columns[1].metric("Feature rows", f"{len(df):,}")
         metric_columns[2].metric("Latest AQI", f"{latest['aqi']:.0f}")
         metric_columns[3].metric("Temperature", f"{latest['temperature_2m']:.1f} C")
-        st.markdown('</div>', unsafe_allow_html=True)
         st.caption(f"Data source: {data_source()} | Latest record: {latest['time']:%Y-%m-%d %H:%M}")
 
         fig = px.bar(overview, x="city", y="aqi", color="aqi", color_continuous_scale="YlOrRd",
@@ -541,6 +550,23 @@ with tabs[3]:
         style_plot(temp_fig)
         st.plotly_chart(temp_fig, use_container_width=True)
 
+@st.cache_data(ttl=3600)
+def load_model_metrics():
+    """Expects models/metrics.json written by the training pipeline, shaped:
+    {"24h": {"r2": 0.87, "mae": 6.1, "rmse": 9.4}, "48h": {...}, "72h": {...}}
+    """
+    import json
+
+    metrics_path = PROJECT_ROOT / "models" / "metrics.json"
+    if not metrics_path.exists():
+        return None
+    try:
+        with open(metrics_path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 with tabs[4]:
     st.title("Model Explainability (SHAP)")
     st.write("Feature contribution plots generated by the training pipeline.")
@@ -551,15 +577,18 @@ with tabs[4]:
         except Exception:
             st.info(f"No SHAP plot found yet for {horizon}. Train the model first.")
 
-with tabs[5]:
-    st.title("About this project")
-    st.write("""
-    Pearls AQI Predictor is an end-to-end, serverless ML system forecasting AQI
-    24h / 48h / 72h ahead for 9 major Pakistani cities.
-
-    Pipeline: Open-Meteo (historical + backfill) -> feature engineering ->
-    Hopsworks feature store -> LightGBM/XGBoost/RandomForest model comparison ->
-    Hopsworks model registry -> FastAPI prediction service -> this Streamlit dashboard.
-
-    Automation: GitHub Actions runs the hourly feature pipeline and a daily retrain.
-    """)
+    st.subheader("Model performance")
+    metrics = load_model_metrics()
+    if metrics:
+        for horizon in ["24h", "48h", "72h"]:
+            if horizon not in metrics:
+                continue
+            m = metrics[horizon]
+            st.markdown(f"**{horizon} forecast**")
+            score_cols = st.columns(3)
+            score_cols[0].metric("R\u00b2", f"{m.get('r2', float('nan')):.3f}")
+            score_cols[1].metric("MAE", f"{m.get('mae', float('nan')):.2f}")
+            score_cols[2].metric("RMSE", f"{m.get('rmse', float('nan')):.2f}")
+    else:
+        st.info("No metrics.json found yet in /models. Have the training pipeline write "
+                "R\u00b2, MAE, and RMSE per horizon there and this section will populate automatically.")
