@@ -58,9 +58,6 @@ THEMES = {
         "plot_grid": "rgba(255,255,255,0.08)",
         "halo_faint": [255, 255, 255, 30],
         "toggle_icon": "\u2600\ufe0f",  # sun - shown when in dark mode (click to go light)
-        "halo_1": "rgba(101, 230, 176, 0.20)",
-        "halo_2": "rgba(255, 200, 117, 0.18)",
-        "halo_3": "rgba(255, 255, 255, 0.10)",
     },
     "light": {
         "ink": "#292b35",
@@ -76,9 +73,6 @@ THEMES = {
         "plot_grid": "rgba(41,43,53,0.12)",
         "halo_faint": [41, 43, 53, 25],
         "toggle_icon": "\U0001F319",  # moon - shown when in light mode (click to go dark)
-        "halo_1": "rgba(174, 196, 255, 0.22)",
-        "halo_2": "rgba(252, 191, 134, 0.20)",
-        "halo_3": "rgba(255, 255, 255, 0.42)",
     },
 }
 
@@ -99,9 +93,6 @@ st.markdown(f"""
         --accent: {theme['accent']};
         --accent-warm: {theme['accent_warm']};
         --base: {theme['base']};
-        --halo-1: {theme['halo_1']};
-        --halo-2: {theme['halo_2']};
-        --halo-3: {theme['halo_3']};
     }}
 
     header[data-testid="stHeader"] {{ background: transparent !important; }}
@@ -110,68 +101,12 @@ st.markdown(f"""
     .stApp {{
         color: var(--ink);
         background: var(--base);
+        background-image:
+            radial-gradient(ellipse 58% 42% at 78% -4%, color-mix(in srgb, #fff6cf 38%, transparent), transparent 60%),
+            radial-gradient(ellipse 46% 36% at 92% 10%, color-mix(in srgb, var(--accent-warm) 26%, transparent), transparent 66%),
+            radial-gradient(circle at 10% 88%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 36%);
         overflow-x: hidden;
         transition: background 0.3s ease;
-    }}
-
-    /* Frosted-glass / phone-style ambient halo.
-       The glow lives only inside the main content area, never in the sidebar. */
-    [data-testid="stAppViewContainer"] > .main {{
-        position: relative;
-        isolation: isolate;
-        overflow: hidden;
-    }}
-    [data-testid="stAppViewContainer"] > .main::before {{
-        content: "";
-        position: absolute;
-        inset: -18rem -10rem;
-        z-index: -1;
-        pointer-events: none;
-        background:
-            radial-gradient(ellipse 34rem 24rem at 78% 8%,
-                var(--halo-3) 0%,
-                var(--halo-2) 28%,
-                transparent 68%),
-            radial-gradient(ellipse 30rem 22rem at 18% 78%,
-                var(--halo-1) 0%,
-                transparent 66%),
-            radial-gradient(ellipse 24rem 18rem at 58% 48%,
-                var(--halo-3) 0%,
-                transparent 72%);
-        filter: blur(34px) saturate(112%);
-        opacity: 0.9;
-        transform: translate3d(0, 0, 0);
-        animation: softHaloDrift 12s ease-in-out infinite alternate;
-    }}
-    [data-testid="stAppViewContainer"] > .main::after {{
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background:
-            linear-gradient(
-                118deg,
-                transparent 12%,
-                color-mix(in srgb, var(--halo-3) 42%, transparent) 33%,
-                transparent 50%,
-                color-mix(in srgb, var(--halo-1) 18%, transparent) 72%,
-                transparent 88%
-            );
-        filter: blur(22px);
-        opacity: 0.32;
-        transform: translateX(-14%);
-        animation: glassSheen 15s ease-in-out infinite;
-    }}
-
-    @keyframes softHaloDrift {{
-        0%   {{ transform: translate3d(-1.5%, -0.5%, 0) scale(0.98); }}
-        50%  {{ transform: translate3d(1%, 1%, 0) scale(1.02); }}
-        100% {{ transform: translate3d(-0.5%, -1%, 0) scale(1); }}
-    }}
-    @keyframes glassSheen {{
-        0%, 100% {{ transform: translateX(-18%) skewX(-8deg); opacity: 0.20; }}
-        50%      {{ transform: translateX(18%) skewX(-8deg); opacity: 0.38; }}
     }}
 
     .block-container {{ position: relative; z-index: 1; padding-top: 1.6rem; padding-bottom: 3.5rem; max-width: 1180px; }}
