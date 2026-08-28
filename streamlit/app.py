@@ -113,26 +113,34 @@ st.markdown(f"""
     h1 {{ letter-spacing: 0.01em; font-weight: 800; }}
 
     /* =====================================================================
-       SIDE RAIL: collapsed to icon-width by default, expands on hover to
-       reveal full nav labels. Active page uses Streamlit's built-in
-       type="primary" button styling so we don't need custom JS state.
+       SIDEBAR: use a stable full-width layout instead of a hover-expand rail.
+       This avoids clipping caused by Streamlit's sidebar wrapper/overflow
+       rules fighting with an animated 5rem -> 15.5rem width.
        ===================================================================== */
+    section[data-testid="stSidebar"],
     [data-testid="stSidebar"] {{
         background: color-mix(in srgb, var(--base) 88%, black 4%) !important;
         border-right: 1px solid var(--border);
-        width: 5rem !important;
-        min-width: 5rem !important;
-        max-width: 5rem !important;
-        transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-        overflow: hidden;
+        width: 17rem !important;
+        min-width: 17rem !important;
+        max-width: 17rem !important;
+        flex: 0 0 17rem !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
     }}
-    [data-testid="stSidebar"]:hover {{
-        width: 15.5rem !important;
-        min-width: 15.5rem !important;
-        max-width: 15.5rem !important;
+    section[data-testid="stSidebar"] > div:first-child,
+    [data-testid="stSidebar"] > div:first-child {{
+        width: 17rem !important;
+        min-width: 17rem !important;
+        max-width: 17rem !important;
+        box-sizing: border-box !important;
     }}
     [data-testid="stSidebar"] > div {{ padding-top: 1rem; }}
-    [data-testid="stSidebarUserContent"] {{ padding: 0 0.6rem; }}
+    [data-testid="stSidebarUserContent"] {{
+        padding: 0 0.8rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }}
 
     .side-brand {{
         display: flex; align-items: center; gap: 0.6rem;
@@ -220,13 +228,25 @@ st.markdown(f"""
     }}
     [data-testid="stMetricDelta"] {{ color: var(--accent) !important; }}
 
+    /* Selectbox: explicitly style the visible value and dropdown options.
+       Streamlit can inherit white option text in light mode, so the text
+       color is forced at every relevant layer. */
     [data-testid="stSelectbox"] > div > div {{
         background: var(--glass-strong) !important;
         border: 1px solid var(--border);
         border-radius: 12px;
-        color: var(--ink);
+        color: var(--ink) !important;
         backdrop-filter: blur(10px);
         transition: all 0.25s ease;
+    }}
+    [data-testid="stSelectbox"] input,
+    [data-testid="stSelectbox"] [role="combobox"],
+    [data-testid="stSelectbox"] [role="combobox"] *,
+    [data-testid="stSelectbox"] [role="option"],
+    [data-testid="stSelectbox"] [role="option"] *,
+    [data-testid="stSelectbox"] p {{
+        color: var(--ink) !important;
+        -webkit-text-fill-color: var(--ink) !important;
     }}
     [data-testid="stSelectbox"] > div > div:hover {{
         border-color: var(--accent);
@@ -310,19 +330,31 @@ def style_plot(fig, height=380):
         font={"color": theme["ink"]},
         title_font={"color": theme["ink"], "size": 18},
         height=height,
-        margin={"l": 24, "r": 24, "t": 56, "b": 24},
+        # Extra breathing room keeps axis titles and tick labels readable.
+        margin={"l": 78, "r": 30, "t": 64, "b": 78},
         legend={"font": {"color": theme["muted"]}},
         xaxis={
-            "gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"],
-            "color": theme["muted"], "tickfont": {"color": theme["muted"]},
-            "title_font": {"color": theme["muted"]},
+            "gridcolor": theme["plot_grid"],
+            "zerolinecolor": theme["plot_grid"],
+            "color": theme["muted"],
+            "tickfont": {"color": theme["muted"], "size": 12},
+            "title_font": {"color": theme["ink"], "size": 14},
+            "title_standoff": 16,
+            "automargin": True,
         },
         yaxis={
-            "gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"],
-            "color": theme["muted"], "tickfont": {"color": theme["muted"]},
-            "title_font": {"color": theme["muted"]},
+            "gridcolor": theme["plot_grid"],
+            "zerolinecolor": theme["plot_grid"],
+            "color": theme["muted"],
+            "tickfont": {"color": theme["muted"], "size": 12},
+            "title_font": {"color": theme["ink"], "size": 14},
+            "title_standoff": 16,
+            "automargin": True,
         },
-        coloraxis_colorbar={"tickfont": {"color": theme["muted"]}, "title_font": {"color": theme["muted"]}},
+        coloraxis_colorbar={
+            "tickfont": {"color": theme["muted"]},
+            "title_font": {"color": theme["ink"]},
+        },
     )
     return fig
 
@@ -626,9 +658,14 @@ elif active == "live":
         cards[0].metric("Current AQI", f"{current_aqi:.0f}" if pd.notna(current_aqi) else "N/A")
         cards[1].metric("Temperature", f"{current_temperature:.1f} C" if pd.notna(current_temperature) else "N/A")
         cards[2].metric("Status", level)
-        st.markdown(f"<span style='color:{color}; font-weight:bold'>{level}</span> "
-                     f"<span style='color:var(--muted); font-size:0.8rem;'>&middot; source: {source_label}</span>",
-                     unsafe_allow_html=True)
+        st.markdown(
+            f"<span style='display:inline-block; color:{color}; font-weight:800; "
+            f"background:var(--glass-strong); border:1px solid var(--border); "
+            f"border-radius:999px; padding:0.22rem 0.6rem; line-height:1.35; "
+            f"box-shadow:0 2px 10px rgba(0,0,0,0.08);'>{level}</span> "
+            f"<span style='color:var(--muted); font-size:0.8rem;'>&middot; source: {source_label}</span>",
+            unsafe_allow_html=True,
+        )
 
         latest_by_city = df.sort_values("time").groupby("city", as_index=False).tail(1)
         render_city_map(latest_by_city, selected_city)
