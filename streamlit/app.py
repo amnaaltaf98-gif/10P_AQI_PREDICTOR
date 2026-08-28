@@ -223,7 +223,7 @@ st.markdown(f"""
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
     }}
 
-    [data-testid="stMain"] .stButton > button, .stDownloadButton > button {{
+    .stButton > button, .stDownloadButton > button {{
         background: var(--glass-strong) !important;
         border: 1px solid var(--border) !important;
         color: var(--ink) !important;
@@ -231,11 +231,20 @@ st.markdown(f"""
         backdrop-filter: blur(10px);
         transition: all 0.2s ease;
     }}
-    [data-testid="stMain"] .stButton > button:hover, .stDownloadButton > button:hover {{
+    .stButton > button *, .stDownloadButton > button * {{
+        color: inherit !important;
+    }}
+    .stButton > button:hover, .stDownloadButton > button:hover {{
         background: var(--glass-hover) !important;
         border-color: var(--accent) !important;
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
         transform: translateY(-2px);
+    }}
+    .stButton > button:focus, .stButton > button:focus-visible,
+    .stDownloadButton > button:focus, .stDownloadButton > button:focus-visible {{
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent) !important;
+        outline: none !important;
+        color: var(--ink) !important;
     }}
 
     [data-testid="stPlotlyChart"], .hero-map-wrap {{
