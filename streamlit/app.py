@@ -102,8 +102,9 @@ st.markdown(f"""
         color: var(--ink);
         background: var(--base);
         background-image:
-            radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--accent-warm) 22%, transparent), transparent 30%),
-            radial-gradient(circle at 8% 84%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%);
+            radial-gradient(ellipse 58% 42% at 78% -4%, color-mix(in srgb, #fff6cf 38%, transparent), transparent 60%),
+            radial-gradient(ellipse 46% 36% at 92% 10%, color-mix(in srgb, var(--accent-warm) 26%, transparent), transparent 66%),
+            radial-gradient(circle at 10% 88%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 36%);
         overflow-x: hidden;
         transition: background 0.3s ease;
     }}
@@ -113,78 +114,120 @@ st.markdown(f"""
     h1 {{ letter-spacing: 0.01em; font-weight: 800; }}
 
     /* =====================================================================
-       SIDEBAR: use a stable full-width layout instead of a hover-expand rail.
-       This avoids clipping caused by Streamlit's sidebar wrapper/overflow
-       rules fighting with an animated 5rem -> 15.5rem width.
+       SIDEBAR: emoji-only rail; hover reveals full tab names.
+       Keep the rail independent from the sunlight effect on the app.
        ===================================================================== */
     section[data-testid="stSidebar"],
     [data-testid="stSidebar"] {{
-        background: color-mix(in srgb, var(--base) 88%, black 4%) !important;
+        background: color-mix(in srgb, var(--base) 96%, black 4%) !important;
         border-right: 1px solid var(--border);
+        width: 5rem !important;
+        min-width: 5rem !important;
+        max-width: 5rem !important;
+        flex: 0 0 5rem !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+        position: relative !important;
+        z-index: 50 !important;
+        transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+    section[data-testid="stSidebar"]:hover,
+    [data-testid="stSidebar"]:hover {{
         width: 17rem !important;
         min-width: 17rem !important;
         max-width: 17rem !important;
-        flex: 0 0 17rem !important;
-        box-sizing: border-box !important;
-        overflow: visible !important;
+        flex-basis: 17rem !important;
     }}
     section[data-testid="stSidebar"] > div:first-child,
     [data-testid="stSidebar"] > div:first-child {{
-        width: 17rem !important;
-        min-width: 17rem !important;
-        max-width: 17rem !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
         box-sizing: border-box !important;
+        overflow: visible !important;
+    }}
+    [data-testid="stSidebar"]::before {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: color-mix(in srgb, var(--base) 98%, black 2%);
+        pointer-events: none;
+        z-index: -1;
     }}
     [data-testid="stSidebar"] > div {{ padding-top: 1rem; }}
     [data-testid="stSidebarUserContent"] {{
-        padding: 0 0.8rem !important;
+        padding: 0 0.55rem !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        overflow: visible !important;
     }}
 
     .side-brand {{
-        display: flex; align-items: center; gap: 0.6rem;
+        display: flex; align-items: center; justify-content: center;
         white-space: nowrap; overflow: hidden;
         font-weight: 800; font-size: 1.05rem; color: var(--ink);
         padding: 0.4rem 0.35rem 1.1rem 0.35rem;
         border-bottom: 1px solid var(--border);
         margin-bottom: 0.8rem;
+        transition: justify-content 0.2s ease;
+    }}
+    [data-testid="stSidebar"]:hover .side-brand {{
+        justify-content: flex-start;
     }}
 
+    [data-testid="stSidebar"] .stButton {{
+        width: 100% !important;
+        overflow: visible !important;
+    }}
     [data-testid="stSidebar"] .stButton button {{
+        width: 100% !important;
         background: transparent !important;
         border: 1px solid transparent !important;
         color: var(--muted) !important;
-        text-align: left !important;
-        justify-content: flex-start !important;
-        align-items: center !important;
         display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
         min-height: 2.9rem !important;
-        line-height: 1.8 !important;
-        white-space: nowrap;
-        overflow-x: hidden;
-        overflow-y: visible;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
         border-radius: 10px !important;
-        padding: 0.5rem 0.75rem !important;
+        padding: 0.5rem 0.45rem !important;
         margin-bottom: 0.3rem;
         font-weight: 600;
         font-size: 1rem;
         transition: all 0.2s ease;
     }}
-    /* Streamlit wraps the label in its own inner container(s) that can
-       carry their own centering - force left-align all the way down so
-       the icon isn't centered inside a box narrower than the full
-       "icon + label" string (which is what was slicing it in half). */
     [data-testid="stSidebar"] .stButton button > div,
     [data-testid="stSidebar"] .stButton button [data-testid="stMarkdownContainer"],
     [data-testid="stSidebar"] .stButton button p {{
         display: block !important;
         width: 100% !important;
-        text-align: left !important;
-        justify-content: flex-start !important;
-        line-height: 1.8 !important;
-        overflow: visible !important;
         margin: 0 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        line-height: 1.2 !important;
+    }}
+    /* Emoji is the first character; keep only it visible in collapsed state. */
+    [data-testid="stSidebar"] .stButton button p {{
+        font-size: 0 !important;
+    }}
+    [data-testid="stSidebar"] .stButton button p::first-letter {{
+        font-size: 1.45rem !important;
+    }}
+    [data-testid="stSidebar"]:hover .stButton button {{
+        justify-content: flex-start !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }}
+    [data-testid="stSidebar"]:hover .stButton button p {{
+        font-size: 1rem !important;
+        text-align: left !important;
+        line-height: 1.5 !important;
+    }}
+    [data-testid="stSidebar"]:hover .stButton button p::first-letter {{
+        font-size: 1rem !important;
     }}
     [data-testid="stSidebar"] .stButton button:hover {{
         background: var(--glass-hover) !important;
@@ -197,7 +240,8 @@ st.markdown(f"""
         box-shadow: 0 0 18px rgba(252,191,134,0.28);
     }}
     .nav-spacer {{ height: 0.6rem; }}
-    .theme-row {{ display: flex; justify-content: flex-start; margin-bottom: 0.6rem; }}
+    .theme-row {{ display: flex; justify-content: center; margin-bottom: 0.6rem; }}
+    [data-testid="stSidebar"]:hover .theme-row {{ justify-content: flex-start; }}
 
     /* =====================================================================
        GLASS PANELS + INTERACTIVITY
