@@ -45,6 +45,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add models/target_aqi_*_delta_xgb.pkl
           git add models/shap_target_aqi_*.png
+          git add models/metrics.json
           if git diff --cached --quiet; then
             echo "No model or SHAP changes to publish."
             exit 0

@@ -6,6 +6,7 @@ Predicts DELTA AQI (AQI_future - AQI_current).
 import os
 import sys
 import time
+import json
 import joblib
 import numpy as np
 import pandas as pd
@@ -350,9 +351,16 @@ def main():
     models_dir = os.path.join(project_root, "models")
     os.makedirs(models_dir, exist_ok=True)
 
+    metrics_by_horizon = {}
     for target_col in TARGETS:
         print(f"\nTraining for {target_col}...")
         model, metrics = train_serverless_horizon(df, target_col)
+        horizon = target_col.replace("target_aqi_", "").replace("_delta", "")
+        metrics_by_horizon[horizon] = {
+            "r2": float(metrics["R2"]),
+            "mae": float(metrics["MAE"]),
+            "rmse": float(metrics["RMSE"]),
+        }
         
         file_name = f"{target_col}_delta_xgb.pkl"
         local_filepath = os.path.join(models_dir, file_name)
@@ -373,6 +381,11 @@ def main():
                 )
                 hw_model.save(tmp_model_path)
                 print(f"Successfully pushed {target_col} model to Hopsworks Model Registry!")
+
+    metrics_path = os.path.join(models_dir, "metrics.json")
+    with open(metrics_path, "w", encoding="utf-8") as metrics_file:
+        json.dump(metrics_by_horizon, metrics_file, indent=2)
+    print(f"Saved model metrics to {metrics_path}")
 
 if __name__ == "__main__":
     main()

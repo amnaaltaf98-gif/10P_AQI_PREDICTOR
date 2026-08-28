@@ -28,8 +28,8 @@ st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sid
 
 # ---------------------------------------------------------------------------
 # THEME
-# Palette kept from the original build: deep navy base, mint accent, warm
-# amber accent, frosted-glass panels. Values below just push translucency
+# Warm stone base, pastel AQI accents, and frosted-glass panels. Values below
+# keep the dashboard light while preserving strong contrast,
 # and contrast further so panels read as "glass over a map" rather than
 # solid cards, and add a couple of missing states (buttons, tabs, sidebar
 # kill-switch) that were leaking default Streamlit styling before.
@@ -37,18 +37,15 @@ st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sid
 st.markdown("""
 <style>
     :root {
-        --ink: #eef6f4;
-        --muted: #a6bab6;
-        --glass: rgba(255, 255, 255, 0.055);
-        --glass-strong: rgba(255, 255, 255, 0.10);
-        --glass-hover: rgba(255, 255, 255, 0.14);
-        --border: rgba(255, 255, 255, 0.14);
-        --accent: #65e6b0;
-        --accent-warm: #ffc875;
-        /* Matches the Carto "dark-matter" basemap tone used by the pydeck
-           map (near-black, faint warm gray) instead of the old blue-navy,
-           so panels and map read as one continuous surface. */
-        --navy: #0d0d0f;
+        --ink: #292b35;
+        --muted: #646672;
+        --glass: rgba(255, 255, 255, 0.42);
+        --glass-strong: rgba(255, 255, 255, 0.58);
+        --glass-hover: rgba(255, 255, 255, 0.74);
+        --border: rgba(41, 43, 53, 0.14);
+        --accent: #8d99ae;
+        --accent-warm: #fcbf86;
+        --base: #e8e1d8;
     }
 
     /* ---- kill Streamlit's default chrome so tabs are the only nav ---- */
@@ -59,11 +56,11 @@ st.markdown("""
 
     .stApp {
         color: var(--ink);
-        background: var(--navy);
+        background: var(--base);
         background-image:
-            radial-gradient(circle at 82% 8%, rgba(255, 200, 117, 0.14), transparent 30%),
-            radial-gradient(circle at 8% 84%, rgba(101, 230, 176, 0.11), transparent 32%),
-            radial-gradient(circle at 50% 50%, rgba(101, 230, 176, 0.03), transparent 60%);
+            radial-gradient(circle at 82% 8%, rgba(252, 191, 134, 0.34), transparent 30%),
+            radial-gradient(circle at 8% 84%, rgba(141, 153, 174, 0.25), transparent 32%),
+            radial-gradient(circle at 50% 50%, rgba(235, 234, 238, 0.55), transparent 60%);
         overflow-x: hidden;
     }
     .stApp::before, .stApp::after {
@@ -158,7 +155,7 @@ st.markdown("""
 
     /* ---- translucent inputs ---- */
     [data-testid="stSelectbox"] > div > div {
-        background: rgba(255, 255, 255, 0.06) !important;
+        background: rgba(255, 255, 255, 0.58) !important;
         border: 1px solid var(--border);
         border-radius: 12px;
         color: var(--ink);
@@ -167,8 +164,8 @@ st.markdown("""
     }
     [data-testid="stSelectbox"] > div > div:hover {
         border-color: var(--accent);
-        background: rgba(255,255,255,0.09) !important;
-        box-shadow: 0 0 18px rgba(101, 230, 176, 0.15);
+        background: rgba(255,255,255,0.74) !important;
+        box-shadow: 0 0 18px rgba(141, 153, 174, 0.24);
     }
 
     /* ---- translucent buttons ---- */
@@ -183,7 +180,7 @@ st.markdown("""
     .stButton > button:hover, .stDownloadButton > button:hover {
         background: var(--glass-hover) !important;
         border-color: var(--accent) !important;
-        box-shadow: 0 0 18px rgba(101, 230, 176, 0.18);
+        box-shadow: 0 0 18px rgba(141, 153, 174, 0.24);
     }
 
     [data-testid="stPlotlyChart"] {
@@ -217,14 +214,14 @@ st.markdown("""
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
     }
-    .legend-title { color: #eef6f4; font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }
+    .legend-title { color: #292b35; font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }
     .legend-bar {
         height: 11px;
         border-radius: 999px;
         background: linear-gradient(90deg, #8D99AE 0 20%, #BBB2C9 20% 40%, #EBDAEE 40% 60%, #FEE3CE 60% 80%, #FCBF86 80% 100%);
     }
-    .legend-labels { display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 0.45rem; color: #cbd8d5; font-size: 0.62rem; }
-    .legend-note { color: #a6bab6; font-size: 0.72rem; line-height: 1.3; margin-top: 1rem; }
+    .legend-labels { display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 0.45rem; color: #4b4d58; font-size: 0.62rem; }
+    .legend-note { color: #646672; font-size: 0.72rem; line-height: 1.3; margin-top: 1rem; }
     [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -345,7 +342,7 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
     deck = pdk.Deck(
         layers=layers,
         initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=zoom, pitch=0),
-        map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+        map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
         tooltip={"html": "<b>{city}</b><br/>AQI: {aqi}", "style": {"color": "white"}},
     )
 
