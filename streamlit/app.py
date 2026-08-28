@@ -143,7 +143,7 @@ st.markdown(f"""
         margin-bottom: 0.8rem;
     }}
 
-    [data-testid="stSidebar"] .stButton > button {{
+    [data-testid="stSidebar"] .stButton button {{
         background: transparent !important;
         border: 1px solid transparent !important;
         color: var(--muted) !important;
@@ -167,9 +167,9 @@ st.markdown(f"""
        carry their own centering - force left-align all the way down so
        the icon isn't centered inside a box narrower than the full
        "icon + label" string (which is what was slicing it in half). */
-    [data-testid="stSidebar"] .stButton > button > div,
-    [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"],
-    [data-testid="stSidebar"] .stButton > button p {{
+    [data-testid="stSidebar"] .stButton button > div,
+    [data-testid="stSidebar"] .stButton button [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] .stButton button p {{
         display: block !important;
         width: 100% !important;
         text-align: left !important;
@@ -178,11 +178,11 @@ st.markdown(f"""
         overflow: visible !important;
         margin: 0 !important;
     }}
-    [data-testid="stSidebar"] .stButton > button:hover {{
+    [data-testid="stSidebar"] .stButton button:hover {{
         background: var(--glass-hover) !important;
         color: var(--ink) !important;
     }}
-    [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+    [data-testid="stSidebar"] .stButton button[kind="primary"] {{
         background: var(--accent-warm) !important;
         color: #1e2029 !important;
         border-color: rgba(252,191,134,0.8) !important;
@@ -234,7 +234,10 @@ st.markdown(f"""
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
     }}
 
-    .stButton > button, .stDownloadButton > button {{
+    .stButton button, .stDownloadButton button,
+    [data-testid^="stBaseButton"], [data-testid^="baseButton"],
+    button[kind="secondary"], button[kind="primary"],
+    button[kind="secondaryFormSubmit"] {{
         background: var(--glass-strong) !important;
         border: 1px solid var(--border) !important;
         color: var(--ink) !important;
@@ -242,17 +245,19 @@ st.markdown(f"""
         backdrop-filter: blur(10px);
         transition: all 0.2s ease;
     }}
-    .stButton > button *, .stDownloadButton > button * {{
+    .stButton button *, .stDownloadButton button *,
+    [data-testid^="stBaseButton"] *, [data-testid^="baseButton"] * {{
         color: inherit !important;
     }}
-    .stButton > button:hover, .stDownloadButton > button:hover {{
+    .stButton button:hover, .stDownloadButton button:hover,
+    [data-testid^="stBaseButton"]:hover, [data-testid^="baseButton"]:hover {{
         background: var(--glass-hover) !important;
         border-color: var(--accent) !important;
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
         transform: translateY(-2px);
     }}
-    .stButton > button:focus, .stButton > button:focus-visible,
-    .stDownloadButton > button:focus, .stDownloadButton > button:focus-visible {{
+    .stButton button:focus, .stButton button:focus-visible,
+    .stDownloadButton button:focus, .stDownloadButton button:focus-visible {{
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent) !important;
         outline: none !important;
         color: var(--ink) !important;
@@ -289,7 +294,7 @@ st.markdown(f"""
     [data-testid="stCaptionContainer"] {{ color: var(--muted) !important; }}
 
     /* clickable "jump to city" chips on Home */
-    .city-chip-row .stButton > button {{
+    .city-chip-row .stButton button {{
         border-radius: 999px !important;
         padding: 0.4rem 1rem !important;
         font-size: 0.85rem;
@@ -423,7 +428,7 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
     map_column, legend_column = st.columns([3.4, 1])
     with map_column:
         st.markdown('<div class="hero-map-wrap">', unsafe_allow_html=True)
-        st.pydeck_chart(deck, use_container_width=True, height=height or 460)
+        st.pydeck_chart(deck, width='stretch', height=height or 460)
         st.markdown('</div>', unsafe_allow_html=True)
     with legend_column:
         st.markdown("""
@@ -531,7 +536,7 @@ NAV_ITEMS = [
 
 with st.sidebar:
     st.markdown('<div class="theme-row">', unsafe_allow_html=True)
-    if st.button(theme["toggle_icon"] + "  Theme", key="theme_toggle", use_container_width=True):
+    if st.button(theme["toggle_icon"] + "  Theme", key="theme_toggle", width='stretch'):
         st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -542,7 +547,7 @@ with st.sidebar:
         is_active = st.session_state.active_tab == key
         if st.button(f"{icon}  {label}", key=f"nav_{key}",
                      type="primary" if is_active else "secondary",
-                     use_container_width=True):
+                     width='stretch'):
             st.session_state.active_tab = key
             st.rerun()
 
@@ -579,7 +584,7 @@ if active == "home":
             level, _ = aqi_alert_level(row["aqi"])
             with col:
                 if st.button(f"{row['city']} \u00b7 AQI {row['aqi']:.0f}", key=f"chip_{row['city']}",
-                             use_container_width=True, help=level):
+                             width='stretch', help=level):
                     st.session_state.jump_city = row["city"]
                     st.session_state.active_tab = "live"
                     st.rerun()
@@ -589,7 +594,7 @@ if active == "home":
                      title="Latest AQI by city", labels={"aqi": "AQI", "city": ""})
         fig.update_layout(coloraxis_showscale=False)
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width='stretch', theme=None)
     else:
         st.info("No feature data found yet. Run the backfill and feature pipeline first.")
 
@@ -634,7 +639,7 @@ elif active == "live":
                   labels={"value": "Reading", "variable": "Metric", "time": ""})
         fig.update_layout(legend_title_text="")
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width='stretch', theme=None)
 
 # ---------------------------------------------------------------------------
 # FORECAST
@@ -659,7 +664,7 @@ elif active == "forecast":
                          color_continuous_scale="YlOrRd", title=f"Model forecast for {selected_city}")
             fig.update_layout(coloraxis_showscale=False)
             style_plot(fig)
-            st.plotly_chart(fig, use_container_width=True, theme=None)
+            st.plotly_chart(fig, width='stretch', theme=None)
         elif not API_BASE_URL:
             st.info("Trained model files are not available yet. Run the training pipeline and publish the model files.")
         else:
@@ -670,7 +675,7 @@ elif active == "forecast":
                 fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
                 fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", title=f"Forecast for {selected_city}")
                 style_plot(fig)
-                st.plotly_chart(fig, use_container_width=True, theme=None)
+                st.plotly_chart(fig, width='stretch', theme=None)
             except Exception as e:
                 st.warning(f"Could not reach prediction API: {e}")
 
@@ -686,17 +691,17 @@ elif active == "eda":
         city_df = df[df.city == selected_city]
         fig = px.line(city_df, x="time", y="aqi", title=f"AQI over time - {selected_city}")
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width='stretch', theme=None)
 
         fig2 = px.box(df, x="city", y="aqi", title="AQI distribution by city")
         style_plot(fig2)
-        st.plotly_chart(fig2, use_container_width=True, theme=None)
+        st.plotly_chart(fig2, width='stretch', theme=None)
 
         temp_fig = px.scatter(df.sample(min(len(df), 3000), random_state=42), x="temperature_2m", y="aqi",
                       color="city", opacity=0.65, title="Temperature and AQI relationship",
                       labels={"temperature_2m": "Temperature (C)", "aqi": "AQI"})
         style_plot(temp_fig)
-        st.plotly_chart(temp_fig, use_container_width=True, theme=None)
+        st.plotly_chart(temp_fig, width='stretch', theme=None)
 
 # ---------------------------------------------------------------------------
 # MODEL EXPLAINABILITY
