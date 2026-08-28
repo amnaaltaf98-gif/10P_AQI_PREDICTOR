@@ -24,205 +24,246 @@ sys.path.insert(0, str(PROJECT_ROOT / "feature_pipeline"))
 sys.path.insert(0, str(PROJECT_ROOT / "training_pipeline"))
 API_BASE_URL = st.secrets.get("API_BASE_URL", os.environ.get("API_BASE_URL", "")).rstrip("/")
 
-st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sidebar_state="expanded")
 
 # ---------------------------------------------------------------------------
-# THEME
-# Warm stone base, pastel AQI accents, and frosted-glass panels. Values below
-# keep the dashboard light while preserving strong contrast,
-# and contrast further so panels read as "glass over a map" rather than
-# solid cards, and add a couple of missing states (buttons, tabs, sidebar
-# kill-switch) that were leaking default Streamlit styling before.
+# SESSION STATE
 # ---------------------------------------------------------------------------
-st.markdown("""
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "home"
+if "jump_city" not in st.session_state:
+    st.session_state.jump_city = None
+
+# ---------------------------------------------------------------------------
+# THEMES
+# Two full palettes, switched at runtime by the toggle button in the side
+# rail. Everything that's theme-sensitive (CSS vars, the pydeck basemap,
+# plotly font/grid colors, marker halo colors) is driven off this dict so
+# nothing gets left half-switched.
+# ---------------------------------------------------------------------------
+THEMES = {
+    "dark": {
+        "ink": "#eef6f4",
+        "muted": "#a6bab6",
+        "glass": "rgba(255, 255, 255, 0.055)",
+        "glass_strong": "rgba(255, 255, 255, 0.10)",
+        "glass_hover": "rgba(255, 255, 255, 0.16)",
+        "border": "rgba(255, 255, 255, 0.14)",
+        "accent": "#65e6b0",
+        "accent_warm": "#ffc875",
+        "base": "#0d0d0f",
+        "map_style": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+        "plot_grid": "rgba(255,255,255,0.08)",
+        "halo_faint": [255, 255, 255, 30],
+        "toggle_icon": "\u2600\ufe0f",  # sun - shown when in dark mode (click to go light)
+    },
+    "light": {
+        "ink": "#292b35",
+        "muted": "#646672",
+        "glass": "rgba(255, 255, 255, 0.42)",
+        "glass_strong": "rgba(255, 255, 255, 0.58)",
+        "glass_hover": "rgba(255, 255, 255, 0.78)",
+        "border": "rgba(41, 43, 53, 0.14)",
+        "accent": "#8d99ae",
+        "accent_warm": "#fcbf86",
+        "base": "#e8e1d8",
+        "map_style": "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+        "plot_grid": "rgba(41,43,53,0.12)",
+        "halo_faint": [41, 43, 53, 25],
+        "toggle_icon": "\U0001F319",  # moon - shown when in light mode (click to go dark)
+    },
+}
+
+theme = THEMES[st.session_state.theme]
+
+# ---------------------------------------------------------------------------
+# CSS
+# ---------------------------------------------------------------------------
+st.markdown(f"""
 <style>
-    :root {
-        --ink: #292b35;
-        --muted: #646672;
-        --glass: rgba(255, 255, 255, 0.42);
-        --glass-strong: rgba(255, 255, 255, 0.58);
-        --glass-hover: rgba(255, 255, 255, 0.74);
-        --border: rgba(41, 43, 53, 0.14);
-        --accent: #8d99ae;
-        --accent-warm: #fcbf86;
-        --base: #e8e1d8;
-    }
+    :root {{
+        --ink: {theme['ink']};
+        --muted: {theme['muted']};
+        --glass: {theme['glass']};
+        --glass-strong: {theme['glass_strong']};
+        --glass-hover: {theme['glass_hover']};
+        --border: {theme['border']};
+        --accent: {theme['accent']};
+        --accent-warm: {theme['accent_warm']};
+        --base: {theme['base']};
+    }}
 
-    /* ---- kill Streamlit's default chrome so tabs are the only nav ---- */
-    [data-testid="stSidebar"],
-    [data-testid="stSidebarNav"],
-    [data-testid="collapsedControl"],
-    header[data-testid="stHeader"] { display: none !important; }
+    header[data-testid="stHeader"] {{ background: transparent !important; }}
+    [data-testid="collapsedControl"] {{ display: none !important; }}
 
-    .stApp {
+    .stApp {{
         color: var(--ink);
         background: var(--base);
         background-image:
-            radial-gradient(circle at 82% 8%, rgba(252, 191, 134, 0.34), transparent 30%),
-            radial-gradient(circle at 8% 84%, rgba(141, 153, 174, 0.25), transparent 32%),
-            radial-gradient(circle at 50% 50%, rgba(235, 234, 238, 0.55), transparent 60%);
+            radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--accent-warm) 22%, transparent), transparent 30%),
+            radial-gradient(circle at 8% 84%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%);
         overflow-x: hidden;
-    }
-    .stApp::before, .stApp::after {
-        content: "";
-        position: fixed;
-        inset: -35%;
-        pointer-events: none;
-        z-index: 0;
-    }
-    .stApp::before {
-        background: radial-gradient(ellipse at 30% 20%, rgba(255, 203, 132, 0.16), transparent 23%),
-                    radial-gradient(ellipse at 75% 70%, rgba(103, 232, 181, 0.10), transparent 24%);
-        filter: blur(38px);
-        animation: sunlight-drift 18s ease-in-out infinite alternate;
-    }
-    .stApp::after {
-        background: repeating-linear-gradient(118deg, transparent 0 90px, rgba(255,255,255,0.025) 110px 155px, transparent 180px 290px);
-        filter: blur(18px);
-        opacity: 0.65;
-        animation: shadow-pan 17s linear infinite;
-    }
-    @keyframes sunlight-drift {
-        from { transform: translate3d(-4%, -2%, 0) rotate(-2deg); }
-        to { transform: translate3d(5%, 3%, 0) rotate(3deg); }
-    }
-    @keyframes shadow-pan {
-        from { transform: translate3d(-7%, -2%, 0); }
-        to { transform: translate3d(7%, 2%, 0); }
-    }
+        transition: background 0.3s ease;
+    }}
 
-    .block-container { position: relative; z-index: 1; padding-top: 2rem; padding-bottom: 3.5rem; max-width: 1200px; }
-    h1, h2, h3, p, label, [data-testid="stCaptionContainer"] { color: var(--ink); }
-    h1 { letter-spacing: 0.01em; font-weight: 800; }
+    .block-container {{ position: relative; z-index: 1; padding-top: 1.6rem; padding-bottom: 3.5rem; max-width: 1180px; }}
+    h1, h2, h3, p, label, [data-testid="stCaptionContainer"] {{ color: var(--ink); }}
+    h1 {{ letter-spacing: 0.01em; font-weight: 800; }}
 
-    /* ---- tabs shown as separate standalone buttons, not one joined bar ---- */
-    [data-testid="stTabs"] [role="tablist"] {
-        gap: 0.6rem;
-        border-bottom: none;
-        padding: 0;
-        background: transparent;
-        border: none;
-        flex-wrap: wrap;
-    }
-    [data-testid="stTabs"] button[role="tab"] {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        color: var(--muted);
-        padding: 0.6rem 1.2rem;
+    /* =====================================================================
+       SIDE RAIL: collapsed to icon-width by default, expands on hover to
+       reveal full nav labels. Active page uses Streamlit's built-in
+       type="primary" button styling so we don't need custom JS state.
+       ===================================================================== */
+    [data-testid="stSidebar"] {{
+        background: color-mix(in srgb, var(--base) 88%, black 4%) !important;
+        border-right: 1px solid var(--border);
+        width: 4.6rem !important;
+        min-width: 4.6rem !important;
+        max-width: 4.6rem !important;
+        transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+    }}
+    [data-testid="stSidebar"]:hover {{
+        width: 15.5rem !important;
+        min-width: 15.5rem !important;
+        max-width: 15.5rem !important;
+    }}
+    [data-testid="stSidebar"] > div {{ padding-top: 1rem; }}
+    [data-testid="stSidebarUserContent"] {{ padding: 0 0.6rem; }}
+
+    .side-brand {{
+        display: flex; align-items: center; gap: 0.6rem;
+        white-space: nowrap; overflow: hidden;
+        font-weight: 800; font-size: 1.05rem; color: var(--ink);
+        padding: 0.4rem 0.35rem 1.1rem 0.35rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0.8rem;
+    }}
+
+    [data-testid="stSidebar"] .stButton > button {{
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        color: var(--muted) !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        white-space: nowrap;
+        overflow: hidden;
+        border-radius: 10px !important;
+        padding: 0.6rem 0.7rem !important;
+        margin-bottom: 0.3rem;
         font-weight: 600;
-        transition: all 0.25s ease;
-        background: var(--glass);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        box-shadow: 0 8px 20px rgba(0,0,0,0.18);
-    }
-    [data-testid="stTabs"] button[role="tab"]:hover {
-        color: var(--ink);
-        background: var(--glass-hover);
-        border-color: rgba(255,255,255,0.22);
-    }
-    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-        color: #1e2029;
-        background: var(--accent-warm);
-        border-color: rgba(252,191,134,0.8);
-        box-shadow: 0 0 24px rgba(252,191,134,0.28);
-    }
-    [data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none; }
+        transition: all 0.2s ease;
+    }}
+    [data-testid="stSidebar"] .stButton > button:hover {{
+        background: var(--glass-hover) !important;
+        color: var(--ink) !important;
+    }}
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+        background: var(--accent-warm) !important;
+        color: #1e2029 !important;
+        border-color: rgba(252,191,134,0.8) !important;
+        box-shadow: 0 0 18px rgba(252,191,134,0.28);
+    }}
+    .nav-spacer {{ height: 0.6rem; }}
+    .theme-row {{ display: flex; justify-content: flex-start; margin-bottom: 0.6rem; }}
 
-    /* ---- glass panels ---- */
-    [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {
+    /* =====================================================================
+       GLASS PANELS + INTERACTIVITY
+       ===================================================================== */
+    [data-testid="stMetric"], [data-testid="stAlert"], [data-testid="stExpander"] {{
         background: var(--glass);
         border: 1px solid var(--border);
         border-radius: 16px;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255,255,255,0.06);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
-    }
-    [data-testid="stMetric"] { padding: 1rem; }
-    [data-testid="stMetricLabel"] p { color: var(--muted) !important; font-weight: 700; }
-    /* Long status strings like "Unhealthy for Sensitive Groups" were being
-       cut off - Streamlit's metric value is single-line/overflow-hidden by
-       default. Let it wrap and shrink instead of clipping. */
-    [data-testid="stMetricValue"] {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }}
+    [data-testid="stMetric"] {{ padding: 1rem; }}
+    [data-testid="stMetric"]:hover {{
+        transform: translateY(-3px);
+        border-color: var(--accent);
+        box-shadow: 0 20px 48px rgba(0,0,0,0.28);
+    }}
+    [data-testid="stMetricLabel"] p {{ color: var(--muted) !important; font-weight: 700; }}
+    [data-testid="stMetricValue"] {{
         color: var(--ink) !important;
         white-space: normal !important;
         overflow: visible !important;
         text-overflow: unset !important;
         line-height: 1.2;
         font-size: clamp(1.05rem, 2.4vw, 1.6rem) !important;
-    }
-    [data-testid="stMetricDelta"] { color: var(--accent) !important; }
+    }}
+    [data-testid="stMetricDelta"] {{ color: var(--accent) !important; }}
 
-    /* ---- translucent inputs ---- */
-    [data-testid="stSelectbox"] > div > div {
-        background: rgba(255, 255, 255, 0.58) !important;
+    [data-testid="stSelectbox"] > div > div {{
+        background: var(--glass-strong) !important;
         border: 1px solid var(--border);
         border-radius: 12px;
         color: var(--ink);
         backdrop-filter: blur(10px);
         transition: all 0.25s ease;
-    }
-    [data-testid="stSelectbox"] > div > div:hover {
+    }}
+    [data-testid="stSelectbox"] > div > div:hover {{
         border-color: var(--accent);
-        background: rgba(255,255,255,0.74) !important;
-        box-shadow: 0 0 18px rgba(141, 153, 174, 0.24);
-    }
+        background: var(--glass-hover) !important;
+        box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
+    }}
 
-    /* ---- translucent buttons ---- */
-    .stButton > button, .stDownloadButton > button {
+    .main .stButton > button, .stDownloadButton > button {{
         background: var(--glass-strong) !important;
         border: 1px solid var(--border) !important;
         color: var(--ink) !important;
         border-radius: 12px !important;
         backdrop-filter: blur(10px);
-        transition: all 0.25s ease;
-    }
-    .stButton > button:hover, .stDownloadButton > button:hover {
+        transition: all 0.2s ease;
+    }}
+    .main .stButton > button:hover, .stDownloadButton > button:hover {{
         background: var(--glass-hover) !important;
         border-color: var(--accent) !important;
-        box-shadow: 0 0 18px rgba(141, 153, 174, 0.24);
-    }
+        box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
+        transform: translateY(-2px);
+    }}
 
-    [data-testid="stPlotlyChart"] {
+    [data-testid="stPlotlyChart"], .hero-map-wrap {{
         background: var(--glass);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 0.4rem;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
         backdrop-filter: blur(10px);
-    }
+        transition: box-shadow 0.25s ease, border-color 0.25s ease;
+    }}
+    [data-testid="stPlotlyChart"]:hover {{ border-color: var(--accent); }}
+    .hero-map-wrap {{ overflow: hidden; padding: 0; }}
 
-    /* ---- hero map wrapper: pulls the following row of glass cards up
-       over its own bottom edge so they read as "floating on the map" ---- */
-    .hero-map-wrap {
-        border-radius: 20px;
-        overflow: hidden;
-        border: 1px solid var(--border);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-        margin-bottom: -3.2rem;
-        position: relative;
-        z-index: 1;
-    }
-    .hero-card-row { position: relative; z-index: 2; margin-top: 1.2rem; }
-
-    .aqi-legend {
+    .aqi-legend {{
         padding: 1rem;
         border: 1px solid var(--border);
         border-radius: 12px;
         background: var(--glass);
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
         backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-    }
-    .legend-title { color: #292b35; font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }
-    .legend-bar {
+    }}
+    .legend-title {{ color: var(--ink); font-size: 0.9rem; font-weight: 800; margin-bottom: 0.7rem; }}
+    .legend-bar {{
         height: 11px;
         border-radius: 999px;
         background: linear-gradient(90deg, #8D99AE 0 20%, #BBB2C9 20% 40%, #EBDAEE 40% 60%, #FEE3CE 60% 80%, #FCBF86 80% 100%);
-    }
-    .legend-labels { display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 0.45rem; color: #4b4d58; font-size: 0.62rem; }
-    .legend-note { color: #646672; font-size: 0.72rem; line-height: 1.3; margin-top: 1rem; }
-    [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+    }}
+    .legend-labels {{ display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 0.45rem; color: var(--muted); font-size: 0.62rem; }}
+    .legend-note {{ color: var(--muted); font-size: 0.72rem; line-height: 1.3; margin-top: 1rem; }}
+    [data-testid="stCaptionContainer"] {{ color: var(--muted) !important; }}
+
+    /* clickable "jump to city" chips on Home */
+    .city-chip-row .stButton > button {{
+        border-radius: 999px !important;
+        padding: 0.4rem 1rem !important;
+        font-size: 0.85rem;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -231,13 +272,13 @@ def style_plot(fig, height=380):
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#eef6f4"},
-        title_font={"color": "#eef6f4", "size": 18},
+        font={"color": theme["ink"]},
+        title_font={"color": theme["ink"], "size": 18},
         height=height,
         margin={"l": 24, "r": 24, "t": 56, "b": 24},
-        legend={"font": {"color": "#cbd8d5"}},
-        xaxis={"gridcolor": "rgba(255,255,255,0.08)", "zerolinecolor": "rgba(255,255,255,0.12)"},
-        yaxis={"gridcolor": "rgba(255,255,255,0.08)", "zerolinecolor": "rgba(255,255,255,0.12)"},
+        legend={"font": {"color": theme["muted"]}},
+        xaxis={"gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"]},
+        yaxis={"gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"]},
     )
     return fig
 
@@ -258,7 +299,7 @@ def aqi_alert_level(aqi):
     return "Good", "green"
 
 
-# 9 cities - keep this in sync with the copy on the About tab below.
+# 9 cities.
 CITY_COORDINATES = {
     "Faisalabad": (31.4504, 73.1350),
     "Hyderabad": (25.3960, 68.3578),
@@ -299,10 +340,6 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
     map_data["color"] = map_data["aqi"].apply(aqi_map_color)
     map_data["radius"] = 5000
 
-    # Two concentric "glow" rings for the selected city, low opacity, drawn
-    # BEHIND the markers (this is the fix: the original build drew these on
-    # top of the markers, so the bigger halo just erased the dot underneath
-    # instead of glowing around it).
     glow_outer = map_data.copy()
     glow_outer["color"] = glow_outer["city"].eq(selected_city).map(
         {True: [255, 200, 117, 55], False: [0, 0, 0, 0]}
@@ -310,13 +347,13 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
     glow_outer["radius"] = glow_outer["city"].eq(selected_city).map({True: 32000, False: 0})
 
     glow_inner = map_data.copy()
+    faint = theme["halo_faint"]
     glow_inner["color"] = glow_inner["city"].eq(selected_city).map(
-        {True: [255, 200, 117, 110], False: [255, 255, 255, 30]}
+        {True: [255, 200, 117, 110], False: faint}
     )
     glow_inner["radius"] = glow_inner["city"].eq(selected_city).map({True: 16000, False: 8000})
 
     layers = [
-        # halos first -> render underneath
         pdk.Layer(
             "ScatterplotLayer", data=glow_outer, get_position="[longitude, latitude]",
             get_fill_color="color", get_radius="radius", stroked=False,
@@ -325,7 +362,6 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
             "ScatterplotLayer", data=glow_inner, get_position="[longitude, latitude]",
             get_fill_color="color", get_radius="radius", stroked=False,
         ),
-        # markers last -> render on top, always visible
         pdk.Layer(
             "ScatterplotLayer", data=map_data, get_position="[longitude, latitude]",
             get_fill_color="color", get_radius="radius", pickable=True,
@@ -336,13 +372,12 @@ def render_city_map(latest_by_city, selected_city=None, height=None):
     if selected_city in CITY_COORDINATES:
         latitude, longitude, zoom = (*CITY_COORDINATES[selected_city], 9.5)
     else:
-        # full-country view
         latitude, longitude, zoom = 30.3753, 69.3451, 4.7
 
     deck = pdk.Deck(
         layers=layers,
         initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=zoom, pitch=0),
-        map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+        map_style=theme["map_style"],
         tooltip={"html": "<b>{city}</b><br/>AQI: {aqi}", "style": {"color": "white"}},
     )
 
@@ -412,9 +447,6 @@ def predict_locally(features):
 
 
 def fetch_live_aqi(city):
-    """Try the FastAPI service for a fresh reading; fall back to the local
-    CSV's latest row on any failure. Previously the API response was
-    fetched and immediately discarded - this now actually uses it."""
     if API_BASE_URL:
         try:
             resp = requests.get(f"{API_BASE_URL}/predict/{city}", timeout=5)
@@ -427,24 +459,92 @@ def fetch_live_aqi(city):
     return None, None
 
 
+@st.cache_data(ttl=3600)
+def load_model_metrics():
+    """Expects models/metrics.json written by the training pipeline, shaped:
+    {"24h": {"r2": 0.87, "mae": 6.1, "rmse": 9.4}, "48h": {...}, "72h": {...}}
+    """
+    import json
+
+    metrics_path = PROJECT_ROOT / "models" / "metrics.json"
+    if not metrics_path.exists():
+        return None
+    try:
+        with open(metrics_path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 df = load_features()
 cities = sorted(df["city"].unique()) if not df.empty else []
 
-tabs = st.tabs(["Home", "Live AQI", "Forecast", "EDA", "Model Explainability"])
+# ---------------------------------------------------------------------------
+# SIDE RAIL NAV
+# ---------------------------------------------------------------------------
+NAV_ITEMS = [
+    ("home", "\U0001F3E0", "Home"),
+    ("live", "\U0001F4E1", "Live AQI"),
+    ("forecast", "\U0001F4C8", "Forecast"),
+    ("eda", "\U0001F50D", "EDA"),
+    ("model", "\U0001F9E0", "Model Explainability"),
+]
 
-with tabs[0]:
+with st.sidebar:
+    st.markdown('<div class="theme-row">', unsafe_allow_html=True)
+    if st.button(theme["toggle_icon"] + "  Theme", key="theme_toggle", use_container_width=True):
+        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="side-brand">\U0001F32B\ufe0f Pearls AQI</div>', unsafe_allow_html=True)
+
+    for key, icon, label in NAV_ITEMS:
+        is_active = st.session_state.active_tab == key
+        if st.button(f"{icon}  {label}", key=f"nav_{key}",
+                     type="primary" if is_active else "secondary",
+                     use_container_width=True):
+            st.session_state.active_tab = key
+            st.rerun()
+
+active = st.session_state.active_tab
+
+# ---------------------------------------------------------------------------
+# HOME
+# ---------------------------------------------------------------------------
+if active == "home":
     st.title("Pearls AQI Predictor")
     if cities:
         overview = (df.sort_values("time").groupby("city", as_index=False).tail(1)
                     .sort_values("aqi", ascending=False))
 
+        top_row = st.columns([1, 1, 1, 1, 0.6])
         latest = df.sort_values("time").iloc[-1]
-        metric_columns = st.columns(4)
-        metric_columns[0].metric("Cities tracked", len(cities))
-        metric_columns[1].metric("Feature rows", f"{len(df):,}")
-        metric_columns[2].metric("Latest AQI", f"{latest['aqi']:.0f}")
-        metric_columns[3].metric("Temperature", f"{latest['temperature_2m']:.1f} C")
+        top_row[0].metric("Cities tracked", len(cities))
+        top_row[1].metric("Feature rows", f"{len(df):,}")
+        top_row[2].metric("Latest AQI", f"{latest['aqi']:.0f}")
+        top_row[3].metric("Temperature", f"{latest['temperature_2m']:.1f} C")
+        with top_row[4]:
+            st.write("")
+            if st.button("\U0001F504 Refresh", help="Clear cache and reload the latest feature data"):
+                load_features.clear()
+                st.rerun()
         st.caption(f"Data source: {data_source()} | Latest record: {latest['time']:%Y-%m-%d %H:%M}")
+
+        st.subheader("Worst air quality right now")
+        st.caption("Tap a city to jump straight to its live reading.")
+        worst = overview.head(3)
+        st.markdown('<div class="city-chip-row">', unsafe_allow_html=True)
+        chip_cols = st.columns(len(worst) if len(worst) else 1)
+        for col, (_, row) in zip(chip_cols, worst.iterrows()):
+            level, _ = aqi_alert_level(row["aqi"])
+            with col:
+                if st.button(f"{row['city']} \u00b7 AQI {row['aqi']:.0f}", key=f"chip_{row['city']}",
+                             use_container_width=True, help=level):
+                    st.session_state.jump_city = row["city"]
+                    st.session_state.active_tab = "live"
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         fig = px.bar(overview, x="city", y="aqi", color="aqi", color_continuous_scale="YlOrRd",
                      title="Latest AQI by city", labels={"aqi": "AQI", "city": ""})
@@ -454,15 +554,21 @@ with tabs[0]:
     else:
         st.info("No feature data found yet. Run the backfill and feature pipeline first.")
 
-with tabs[1]:
+# ---------------------------------------------------------------------------
+# LIVE AQI
+# ---------------------------------------------------------------------------
+elif active == "live":
     st.title("Live AQI")
     if not cities:
         st.info("No feature data found yet. Run the backfill and feature pipeline first.")
     else:
-        selected_city = st.selectbox("City", cities)
+        default_index = cities.index(st.session_state.jump_city) if st.session_state.jump_city in cities else 0
+        selected_city = st.selectbox("City", cities, index=default_index, key="live_city_select")
+        st.session_state.jump_city = None  # only pre-select once
         city_rows = df[df.city == selected_city].sort_values("time")
 
-        live_aqi, source_label = fetch_live_aqi(selected_city)
+        with st.spinner("Checking live feed..."):
+            live_aqi, source_label = fetch_live_aqi(selected_city)
         if live_aqi is not None:
             current_aqi = live_aqi
         else:
@@ -491,7 +597,10 @@ with tabs[1]:
         style_plot(fig)
         st.plotly_chart(fig, use_container_width=True)
 
-with tabs[2]:
+# ---------------------------------------------------------------------------
+# FORECAST
+# ---------------------------------------------------------------------------
+elif active == "forecast":
     st.title("3-Day Forecast")
     if not cities:
         st.info("No feature data found yet.")
@@ -526,7 +635,10 @@ with tabs[2]:
             except Exception as e:
                 st.warning(f"Could not reach prediction API: {e}")
 
-with tabs[3]:
+# ---------------------------------------------------------------------------
+# EDA
+# ---------------------------------------------------------------------------
+elif active == "eda":
     st.title("Exploratory Data Analysis")
     if df.empty:
         st.info("No feature data found yet.")
@@ -547,24 +659,10 @@ with tabs[3]:
         style_plot(temp_fig)
         st.plotly_chart(temp_fig, use_container_width=True)
 
-@st.cache_data(ttl=3600)
-def load_model_metrics():
-    """Expects models/metrics.json written by the training pipeline, shaped:
-    {"24h": {"r2": 0.87, "mae": 6.1, "rmse": 9.4}, "48h": {...}, "72h": {...}}
-    """
-    import json
-
-    metrics_path = PROJECT_ROOT / "models" / "metrics.json"
-    if not metrics_path.exists():
-        return None
-    try:
-        with open(metrics_path) as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-with tabs[4]:
+# ---------------------------------------------------------------------------
+# MODEL EXPLAINABILITY
+# ---------------------------------------------------------------------------
+elif active == "model":
     st.title("Model Explainability (SHAP)")
     st.write("Feature contribution plots generated by the training pipeline.")
     for horizon in ["24h", "48h", "72h"]:
