@@ -120,9 +120,9 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{
         background: color-mix(in srgb, var(--base) 88%, black 4%) !important;
         border-right: 1px solid var(--border);
-        width: 4.6rem !important;
-        min-width: 4.6rem !important;
-        max-width: 4.6rem !important;
+        width: 5rem !important;
+        min-width: 5rem !important;
+        max-width: 5rem !important;
         transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
         overflow: hidden;
     }}
@@ -149,13 +149,23 @@ st.markdown(f"""
         color: var(--muted) !important;
         text-align: left !important;
         justify-content: flex-start !important;
+        align-items: center !important;
+        display: flex !important;
+        min-height: 2.9rem !important;
+        line-height: 1.8 !important;
         white-space: nowrap;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: visible;
         border-radius: 10px !important;
-        padding: 0.6rem 0.7rem !important;
+        padding: 0.5rem 0.75rem !important;
         margin-bottom: 0.3rem;
         font-weight: 600;
+        font-size: 1rem;
         transition: all 0.2s ease;
+    }}
+    [data-testid="stSidebar"] .stButton > button p {{
+        line-height: 1.8 !important;
+        overflow: visible !important;
     }}
     [data-testid="stSidebar"] .stButton > button:hover {{
         background: var(--glass-hover) !important;
@@ -213,7 +223,7 @@ st.markdown(f"""
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
     }}
 
-    .main .stButton > button, .stDownloadButton > button {{
+    [data-testid="stMain"] .stButton > button, .stDownloadButton > button {{
         background: var(--glass-strong) !important;
         border: 1px solid var(--border) !important;
         color: var(--ink) !important;
@@ -221,7 +231,7 @@ st.markdown(f"""
         backdrop-filter: blur(10px);
         transition: all 0.2s ease;
     }}
-    .main .stButton > button:hover, .stDownloadButton > button:hover {{
+    [data-testid="stMain"] .stButton > button:hover, .stDownloadButton > button:hover {{
         background: var(--glass-hover) !important;
         border-color: var(--accent) !important;
         box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
@@ -277,8 +287,17 @@ def style_plot(fig, height=380):
         height=height,
         margin={"l": 24, "r": 24, "t": 56, "b": 24},
         legend={"font": {"color": theme["muted"]}},
-        xaxis={"gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"]},
-        yaxis={"gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"]},
+        xaxis={
+            "gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"],
+            "color": theme["muted"], "tickfont": {"color": theme["muted"]},
+            "title_font": {"color": theme["muted"]},
+        },
+        yaxis={
+            "gridcolor": theme["plot_grid"], "zerolinecolor": theme["plot_grid"],
+            "color": theme["muted"], "tickfont": {"color": theme["muted"]},
+            "title_font": {"color": theme["muted"]},
+        },
+        coloraxis_colorbar={"tickfont": {"color": theme["muted"]}, "title_font": {"color": theme["muted"]}},
     )
     return fig
 
@@ -550,7 +569,7 @@ if active == "home":
                      title="Latest AQI by city", labels={"aqi": "AQI", "city": ""})
         fig.update_layout(coloraxis_showscale=False)
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
     else:
         st.info("No feature data found yet. Run the backfill and feature pipeline first.")
 
@@ -595,7 +614,7 @@ elif active == "live":
                   labels={"value": "Reading", "variable": "Metric", "time": ""})
         fig.update_layout(legend_title_text="")
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
 
 # ---------------------------------------------------------------------------
 # FORECAST
@@ -620,7 +639,7 @@ elif active == "forecast":
                          color_continuous_scale="YlOrRd", title=f"Model forecast for {selected_city}")
             fig.update_layout(coloraxis_showscale=False)
             style_plot(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, theme=None)
         elif not API_BASE_URL:
             st.info("Trained model files are not available yet. Run the training pipeline and publish the model files.")
         else:
@@ -631,7 +650,7 @@ elif active == "forecast":
                 fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
                 fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", title=f"Forecast for {selected_city}")
                 style_plot(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, theme=None)
             except Exception as e:
                 st.warning(f"Could not reach prediction API: {e}")
 
@@ -647,17 +666,17 @@ elif active == "eda":
         city_df = df[df.city == selected_city]
         fig = px.line(city_df, x="time", y="aqi", title=f"AQI over time - {selected_city}")
         style_plot(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
 
         fig2 = px.box(df, x="city", y="aqi", title="AQI distribution by city")
         style_plot(fig2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, theme=None)
 
         temp_fig = px.scatter(df.sample(min(len(df), 3000), random_state=42), x="temperature_2m", y="aqi",
                       color="city", opacity=0.65, title="Temperature and AQI relationship",
                       labels={"temperature_2m": "Temperature (C)", "aqi": "AQI"})
         style_plot(temp_fig)
-        st.plotly_chart(temp_fig, use_container_width=True)
+        st.plotly_chart(temp_fig, use_container_width=True, theme=None)
 
 # ---------------------------------------------------------------------------
 # MODEL EXPLAINABILITY
