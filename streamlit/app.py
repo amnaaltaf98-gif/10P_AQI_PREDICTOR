@@ -163,9 +163,20 @@ st.markdown(f"""
         font-size: 1rem;
         transition: all 0.2s ease;
     }}
+    /* Streamlit wraps the label in its own inner container(s) that can
+       carry their own centering - force left-align all the way down so
+       the icon isn't centered inside a box narrower than the full
+       "icon + label" string (which is what was slicing it in half). */
+    [data-testid="stSidebar"] .stButton > button > div,
+    [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"],
     [data-testid="stSidebar"] .stButton > button p {{
+        display: block !important;
+        width: 100% !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
         line-height: 1.8 !important;
         overflow: visible !important;
+        margin: 0 !important;
     }}
     [data-testid="stSidebar"] .stButton > button:hover {{
         background: var(--glass-hover) !important;
