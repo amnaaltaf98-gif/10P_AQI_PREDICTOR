@@ -526,14 +526,6 @@ def load_features():
     return pd.DataFrame()
 
 
-def data_source():
-    if (PROJECT_ROOT / "data" / "features_all_cities.csv").exists():
-        return "Local historical features"
-    if (PROJECT_ROOT / "data" / "live_buffer.csv").exists():
-        return "Local tracked live buffer"
-    return "Unavailable"
-
-
 @st.cache_resource
 def load_local_models():
     import joblib
@@ -642,14 +634,15 @@ if active == "home":
         latest = df.sort_values("time").iloc[-1]
         top_row[0].metric("Cities tracked", len(cities))
         top_row[1].metric("Feature rows", f"{len(df):,}")
-        top_row[2].metric("Latest AQI", f"{latest['aqi']:.0f}")
-        top_row[3].metric("Temperature", f"{latest['temperature_2m']:.1f} C")
+        latest_city = latest["city"]
+        top_row[2].metric(f"Latest AQI · {latest_city}", f"{latest['aqi']:.0f}")
+        top_row[3].metric(f"Temperature · {latest_city}", f"{latest['temperature_2m']:.1f} C")
         with top_row[4]:
             st.write("")
             if st.button("\U0001F504 Refresh", help="Clear cache and reload the latest feature data"):
                 load_features.clear()
                 st.rerun()
-        st.caption(f"Data source: {data_source()} | Latest record: {latest['time']:%Y-%m-%d %H:%M}")
+        st.caption(f"Latest record: {latest['time']:%Y-%m-%d %H:%M}")
 
         st.subheader("Worst air quality right now")
         st.caption("Tap a city to jump straight to its live reading.")
@@ -706,8 +699,7 @@ elif active == "live":
             f"<span style='display:inline-block; color:{color}; font-weight:800; "
             f"background:var(--glass-strong); border:1px solid var(--border); "
             f"border-radius:999px; padding:0.22rem 0.6rem; line-height:1.35; "
-            f"box-shadow:0 2px 10px rgba(0,0,0,0.08);'>{level}</span> "
-            f"<span style='color:var(--muted); font-size:0.8rem;'>&middot; source: {source_label}</span>",
+            f"box-shadow:0 2px 10px rgba(0,0,0,0.08);'>{level}</span>",
             unsafe_allow_html=True,
         )
 
@@ -739,7 +731,6 @@ elif active == "forecast":
 
         if local_forecasts and selected_city in local_forecasts:
             forecast = local_forecasts[selected_city]
-            st.caption("Prediction source: trained XGBoost models")
             fc_df = pd.DataFrame({"Horizon": list(forecast.keys()), "Predicted AQI": list(forecast.values())})
             fig = px.bar(fc_df, x="Horizon", y="Predicted AQI", color="Predicted AQI",
                          color_continuous_scale="YlOrRd", title=f"Model forecast for {selected_city}")
