@@ -630,14 +630,13 @@ if active == "home":
         overview = (df.sort_values("time").groupby("city", as_index=False).tail(1)
                     .sort_values("aqi", ascending=False))
 
-        top_row = st.columns([1, 1, 1, 1, 0.6])
+        top_row = st.columns([1, 1, 1, 0.6])
         latest = df.sort_values("time").iloc[-1]
         top_row[0].metric("Cities tracked", len(cities))
-        top_row[1].metric("Feature rows", f"{len(df):,}")
         latest_city = latest["city"]
-        top_row[2].metric(f"Latest AQI · {latest_city}", f"{latest['aqi']:.0f}")
-        top_row[3].metric(f"Temperature · {latest_city}", f"{latest['temperature_2m']:.1f} C")
-        with top_row[4]:
+        top_row[1].metric(f"Latest AQI · {latest_city}", f"{latest['aqi']:.0f}")
+        top_row[2].metric(f"Temperature · {latest_city}", f"{latest['temperature_2m']:.1f} C")
+        with top_row[3]:
             st.write("")
             if st.button("\U0001F504 Refresh", help="Clear cache and reload the latest feature data"):
                 load_features.clear()
