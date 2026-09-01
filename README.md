@@ -1,88 +1,348 @@
 # Pearls AQI Predictor
 
-Serverless, end-to-end ML system that forecasts AQI 24h / 48h / 72h ahead for 10 major Pakistani cities:
-Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, Multan, Peshawar, Quetta, Hyderabad, Sialkot.
+Live demo: [Pearls AQI Predictor · Streamlit](https://10pearls-aqi-predictor-amna-altaf.streamlit.app/)
 
-## Architecture
+A production-style air quality forecasting system designed for major Pakistani cities. The project combines historical climate and pollutant data, engineered forecasting features, and machine learning models to estimate AQI at multiple future horizons. It delivers both a prediction API and an interactive dashboard for monitoring current conditions and forecasting the next 24, 48, and 72 hours.
 
+## Overview
+
+The AQI Predictor is built to answer a practical question: how polluted will the air become in the next few days, and how confident can that forecast be? The solution uses a complete ML pipeline, from data acquisition and feature engineering to model training and deployment.
+
+At a high level, the system:
+
+- pulls historical and live meteorological and air-quality data
+- computes AQI from pollutant concentrations using EPA-style thresholds
+- engineers lag, rolling, seasonal, and environmental features
+- trains gradient boosting models for multi-horizon forecasting
+- exposes predictions through a REST API
+- presents live and forecasted AQI in a Streamlit dashboard
+
+This is a full-stack forecasting project with a clear separation between data engineering, model training, inference, and user-facing visualization.
+
+## Supported Cities
+
+The project is configured for the following cities in Pakistan:
+
+- Karachi
+- Lahore
+- Islamabad
+- Rawalpindi
+- Faisalabad
+- Multan
+- Quetta
+- Hyderabad
+- Sialkot
+
+## Key Features
+
+### Multi-horizon forecasting
+The model stack predicts AQI for:
+
+- 24 hours ahead
+- 48 hours ahead
+- 72 hours ahead
+
+### Feature-rich modeling
+The feature pipeline builds a wide range of predictive signals, including:
+
+- hourly, daily, and seasonal time features
+- lagged AQI values
+- rolling AQI statistics
+- meteorological interactions
+- pollutant ratios and environmental trend indicators
+- city-aware spatial and drift-related features
+
+### City-aware data integrity
+The feature engineering logic is implemented to avoid cross-city leakage by grouping calculations by city before shift and rolling operations. This keeps temporal modeling realistic and prevents artifacts caused by mixing observations from different cities.
+
+### Live AQI workflow
+The project has a live data path that fetches current pollutant readings and merges them with recent historical coverage so inference can produce valid forecast features for the present moment.
+
+### Interactive monitoring dashboard
+The Streamlit interface lets users:
+
+- inspect live AQI conditions
+- view city-level historical trends
+- explore forecast outputs
+- review model explainability and feature behavior
+- assess the current monitoring state in a visually rich dashboard
+
+## Project Architecture
+
+```text
+Open-Meteo archive + live pollutant sources
+        |
+        v
+feature_pipeline/
+  - data acquisition
+  - AQI calculations
+  - feature engineering
+  - live inference feature preparation
+        |
+        v
+training_pipeline/
+  - model training
+  - validation and scoring
+  - model export
+        |
+        v
+models/
+  - trained forecast models
+        |
+        v
+fastapi/
+  - prediction API
+        |
+        v
+streamlit/
+  - dashboard and analytics UI
 ```
-Open-Meteo Archive (historical weather + air quality, 2+ years, free, no key)
-        |
-feature_engineering.py  (lag/rolling/time/derived features, no cross-city leakage)
-        |
-Hopsworks Feature Store
-        |
-train.py  (XGBoost, compared against a persistence baseline)
-        |
-Hopsworks Model Registry
-        |
-FastAPI (/predict) <---- hourly live pull from OpenWeather Air Pollution API
-        |
-Streamlit Dashboard (Live AQI, Forecast, EDA, SHAP explainability, alerts)
+
+## Repository Structure
+
+```text
+10P_AQI_PROJECT/
+├── data/
+│   ├── raw_all_cities.csv
+│   ├── features_all_cities.csv
+│   ├── live_buffer.csv
+│   └── ...
+├── feature_pipeline/
+│   ├── aqi_utils.py
+│   ├── audit_data_quality.py
+│   ├── backfill_extend_earlier.py
+│   ├── backfill_history.py
+│   ├── config.py
+│   ├── feature_engineering.py
+│   ├── fetch_live_data.py
+│   ├── inference_features.py
+│   ├── reseed_buffer_from_hopsworks.py
+│   └── upload_to_hopsworks.py
+├── training_pipeline/
+│   └── train.py
+├── fastapi/
+│   └── main.py
+├── streamlit/
+│   └── app.py
+├── models/
+│   └── metrics.json
+├── notebooks/
+├── requirements.txt
+├── requirements-pipeline.txt
+├── runtime.txt
+├── README.md
+└── .env
 ```
 
-Automation via GitHub Actions:
-- **Hourly**: `feature_pipeline/fetch_live_data.py` pulls current pollutant readings and pushes to Hopsworks.
-- **Daily**: `training_pipeline/train.py` retrains on the latest data and registers the best model.
+## Tech Stack
 
-## Folder structure
+### Data and feature engineering
+- Python
+- pandas
+- NumPy
+- requests
+- python-dotenv
+- Open-Meteo APIs
+- OpenWeather Air Pollution API
 
+### Machine learning
+- XGBoost
+- scikit-learn
+- joblib
+- SHAP for explainability
+
+### Application layer
+- FastAPI
+- Streamlit
+- Plotly
+- PyDeck
+
+### MLOps and deployment support
+- Hopsworks for feature storage and model registry workflows
+- GitHub automation support for periodic updates
+
+## Data Sources
+
+The project uses a layered data strategy built around both historical and live information.
+
+### Historical data
+Historical weather and environmental data are pulled from Open-Meteo archives. This provides a consistent time-series foundation for backfilling long-running historical records and building the model feature set.
+
+### Live data
+Current pollutant readings are collected using the OpenWeather Air Pollution API. These observations are used to create fresh inference inputs and keep forecasting aligned with real-time conditions.
+
+### AQI calculation
+The project computes AQI values from pollutant measurements, especially PM2.5 and PM10, using EPA-style breakpoint logic. This ensures that the AQI values used in features, targets, and live inference are derived consistently across the pipeline.
+
+## Model Training Workflow
+
+The training pipeline is centered in [training_pipeline/train.py](training_pipeline/train.py). It performs the following tasks:
+
+1. loads feature data for the supported cities
+2. prepares training targets for 24h, 48h, and 72h horizons
+3. engineers additional model-compatible features
+4. evaluates models using validation metrics
+5. trains XGBoost regressors for each forecast horizon
+6. saves the trained models and evaluation outputs
+
+The model configuration includes strong gradient boosting settings designed for tabular, time-aware regression tasks. Training is optimized for performance while maintaining interpretability and stability across multiple forecast horizons.
+
+## Inference and API Layer
+
+The REST API is implemented in [fastapi/main.py](fastapi/main.py). It provides endpoints for:
+
+- service health checks
+- listing supported cities
+- generating all-city forecasts
+- generating single-city forecasts
+
+The API workflow follows a realistic production sequence:
+
+1. fetch current readings for cities
+2. load recent historical buffer data
+3. generate inference features using the same logic as model training
+4. run the trained XGBoost models for each forecast horizon
+5. return AQI predictions in a clean JSON structure
+
+This keeps the forecasting process aligned with the actual training methodology rather than relying on a simplified one-off prediction path.
+
+## Dashboard
+
+The dashboard in [streamlit/app.py](streamlit/app.py) is a modern analytical front end for the AQI predictor. It includes:
+
+- live AQI summaries
+- city-wise monitoring views
+- forecast summaries for the next 24/48/72 hours
+- historical trend exploration
+- model explainability and interpretability views
+- clean, responsive visual design
+
+The app is designed to be both operationally useful and easy to navigate for users monitoring air quality across multiple cities.
+
+## Local Setup
+
+### Prerequisites
+
+- Python 3.11
+- pip
+- access to the project environment
+
+### 1. Create a virtual environment
+
+```bash
+python -m venv venv
 ```
-AQI-Predictor/
-  data/                   raw + feature CSVs (gitignored except .gitkeep)
-  feature_pipeline/       config, AQI math, backfill, live fetch, feature engineering
-  training_pipeline/      train.py (model comparison + SHAP)
-  models/                 saved .pkl models + SHAP plots
-  fastapi/                prediction API
-  streamlit/              dashboard
-  .github/workflows/      hourly + daily automation
-  notebooks/              EDA notebooks (add your own)
+
+On Windows PowerShell:
+
+```powershell
+.\venv\Scripts\Activate.ps1
 ```
 
-## Setup
+### 2. Install dependencies
 
-1. For the Streamlit dashboard, create a Python 3.11 virtual environment and install the minimal dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+For the dashboard and basic runtime features:
 
-The dashboard can run without Hopsworks or FastAPI. It reads the tracked `data/live_buffer.csv` fallback for the current AQI and historical views. Forecasts are shown only when `API_BASE_URL` is configured with the URL of a separately deployed FastAPI service.
+```bash
+pip install -r requirements.txt
+```
 
-The feature pipeline, model training, and FastAPI service use additional packages and should run in a separate environment. Do not add those packages to the Streamlit Cloud `requirements.txt`; that makes deployment depend on build-heavy and Python-version-sensitive libraries.
-2. Copy `.env.example` to `.env` and fill in:
-   - `OPENWEATHER_API_KEY` (free tier is fine, needed only for hourly live data)
-        - `HOPSWORKS_API_KEY` and `HOPSWORKS_PROJECT_NAME` (create a free project at hopsworks.ai; needed only by the pipeline)
-        - `API_BASE_URL` (optional; the deployed FastAPI URL used for forecasts)
-3. Add the same three values as GitHub repo secrets (Settings -> Secrets and variables -> Actions) so the workflows can run.
+For the full data pipeline, training workflow, API, and model tooling:
 
-## Run order (first time)
+```bash
+pip install -r requirements-pipeline.txt
+```
+
+### 3. Configure environment variables
+
+Create a root-level `.env` file and set the required values:
+
+```env
+OPENWEATHER_API_KEY=your_openweather_key
+HOPSWORKS_API_KEY=your_hopsworks_key
+HOPSWORKS_PROJECT_NAME=your_hopsworks_project
+```
+
+You may also configure an `API_BASE_URL` value if the dashboard should point to a deployed FastAPI service for forecast data.
+
+## Running the Project
+
+### Feature pipeline
+From the project root:
 
 ```bash
 cd feature_pipeline
-python backfill_history.py       # ~2.5 years of hourly data for all 10 cities, takes a few minutes
-python feature_engineering.py    # builds lag/rolling/time features + targets
-
-cd ../training_pipeline
-python train.py                  # trains and compares models, saves best + SHAP plots
-
-cd ../fastapi
-uvicorn main:app --reload        # optional prediction API on localhost:8000
-
-cd ../streamlit
-streamlit run app.py             # dashboard on localhost:8501
+python backfill_history.py
+python feature_engineering.py
 ```
 
-After the first backfill, the hourly/daily GitHub Actions workflows keep everything current automatically.
+These steps build the historical dataset and generate engineered features used in training and inference.
 
-## Data sources
+### Model training
 
-- **Open-Meteo Archive API** and **Open-Meteo Air Quality API**: historical weather + pollutants, free, no key, unlimited range. Used for backfill so history and later forecasts share the same format.
-- **OpenWeather Air Pollution API**: current pollutant readings, used only for the hourly live pipeline.
-- AQI itself is computed from PM2.5/PM10 using standard EPA breakpoints (`feature_pipeline/aqi_utils.py`), so historical and live values are calculated identically.
+```bash
+cd training_pipeline
+python train.py
+```
 
-## Notes on the feature engineering leakage fix
+This trains the forecasting models and exports metrics and model artifacts for the active project.
 
-Every lag, rolling, and target column is computed with `.groupby("city")` before any shift/rolling operation.
-Sorting the full dataframe by time alone and then computing lags naively lets the last row of one city
-leak into the first "lag" of the next city once cities are stacked. This was tested in
-`feature_pipeline/feature_engineering.py` and confirmed fixed: see the module docstring for the reasoning.
+### FastAPI service
+
+```bash
+cd fastapi
+uvicorn main:app --reload
+```
+
+The API will be available locally on the default FastAPI port, typically:
+
+```text
+http://localhost:8000
+```
+
+### Streamlit dashboard
+
+```bash
+cd streamlit
+streamlit run app.py
+```
+
+The dashboard typically opens at:
+
+```text
+http://localhost:8501
+```
+
+## Data Pipeline Workflow
+
+The project is designed to support an end-to-end forecast lifecycle:
+
+1. historical weather and pollution records are collected
+2. AQI is computed and standardized
+3. feature engineering creates time-aware prediction signals
+4. XGBoost models are trained on the prepared dataset
+5. live data is fetched and transformed into inference-ready features
+6. forecasts are served through the API and displayed in the dashboard
+
+This creates a reusable and maintainable forecasting foundation rather than a one-off notebook workflow.
+
+## Production-Ready Characteristics
+
+The project is structured to be practical for ongoing operations:
+
+- modular separation of responsibilities across pipelines and app layers
+- reproducible feature generation for training and inference
+- model artifact persistence for deployment reuse
+- API access for integration with other dashboards or services
+- interactive visualization for operational monitoring
+
+## Best Practices and Usage Notes
+
+- Keep the data pipeline and training tools in a dedicated Python environment to avoid dependency conflicts.
+- Keep the dashboard runtime lightweight and focused on display and interaction.
+- Use the trained models consistently with the same feature-generation logic as the training pipeline.
+- Monitor the live buffer and recent feature history to preserve forecasting quality over time.
+
+## Summary
+
+The Pearls AQI Predictor is a comprehensive air-quality forecasting project that connects environmental data, advanced feature engineering, and machine learning to deliver practical AQI forecasts for multiple cities in Pakistan. It combines robust modeling with a deployable API and a polished user-facing dashboard, making it suitable for operational air-quality monitoring and forward-looking environmental planning.
