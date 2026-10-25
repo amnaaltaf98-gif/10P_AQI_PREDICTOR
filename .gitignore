@@ -1,5 +1,4 @@
 venv/
-.env
 data/raw_all_cities.csv
 data/raw_*.csv
 data/features_all_cities.csv
@@ -17,3 +16,5 @@ __pycache__/
 
 # Streamlit local secrets
 .streamlit/secrets.toml
+config.bat
+node_modules
