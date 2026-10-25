@@ -22,6 +22,8 @@ Run locally:
     uvicorn main:app --reload
 """
 
+import utils.transport
+import utils.session
 import os
 import sys
 from datetime import datetime, timezone
